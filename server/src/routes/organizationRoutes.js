@@ -8,8 +8,7 @@ const org = require('../services/organizationService');
 const router = express.Router();
 const logoUpload = createImageUpload({ folder: 'branding', prefix: 'logo', maxBytes: 2 * 1024 * 1024 });
 
-// TODO(Phase 1 step 6): use the configured time zone instead of a fixed one.
-const todayInShopZone = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+const { today: todayInShopZone } = require('../services/calendar');
 
 function snapshot() {
   const organization = org.getOrganization();

@@ -129,6 +129,12 @@ test('reports and customer totals read paise correctly', async () => {
   assert.equal(cust.body.orders[0].final_amount, 70.3);
 });
 
+test('new customers continue after the highest existing CUST- code', async () => {
+  const r = await t.call('POST', '/api/customers', { token: admin, body: { name: 'Meena', phone: '9000000001' } });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.customer.customer_code, 'CUST-0002');
+});
+
 test('running migrations again changes nothing', () => {
   const { migrate } = require('../src/db/migrate');
   assert.deepEqual(migrate({ log: () => {} }), []);
@@ -142,7 +148,9 @@ test('new bills save after the upgrade and continue numbering', async () => {
   assert.equal(r.status, 201);
   assert.equal(r.body.order.final_amount, 30.3);
   assert.equal(r.body.order.change_given, 19.7);
-  assert.equal(r.body.invoice_no, 'INV-0003');
+  // Old bills keep their numbers; new ones use the invoice series for the current financial year
+  const fy = require('../src/services/calendar').financialYear(require('../src/services/calendar').localDateParts()).short;
+  assert.equal(r.body.invoice_no, `INV/${fy}/0001`);
 });
 
 test('a failure while saving a bill leaves nothing behind (all-or-nothing)', async () => {
@@ -171,7 +179,7 @@ test('a failure while saving a bill leaves nothing behind (all-or-nothing)', asy
   const next = await t.call('POST', '/api/orders', {
     token: admin, body: { items: [{ item_id: 2, quantity: 1 }], payment_method: 'UPI' }
   });
-  assert.equal(next.body.invoice_no, 'INV-0004', 'the failed bill did not use up an invoice number');
+  assert.match(next.body.invoice_no, /\/0002$/, 'the failed bill did not use up an invoice number');
 });
 
 test('2,000 bills save quickly and the list stays fast', async () => {

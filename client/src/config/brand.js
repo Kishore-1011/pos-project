@@ -4,7 +4,8 @@ export const PRODUCT_NAME = 'POS Project';
 export const PRODUCT_SHORT = 'POS';
 export const STORAGE_PREFIX = 'pos_project';
 
-// Matches the server's default invoice prefix (server/src/config/brand.js).
+// Display fallback only, for a record that somehow has no invoice number.
+// Real numbers come from the server's number series (default INV/25-26/0001).
 export const INVOICE_PREFIX = 'INV-';
 export const formatInvoiceFallback = (id) => `${INVOICE_PREFIX}${String(id || 1).padStart(4, '0')}`;
 

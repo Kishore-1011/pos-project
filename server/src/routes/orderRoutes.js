@@ -1,9 +1,9 @@
 const express = require('express');
-const { all, get, run, getSync, runSync, transaction } = require('../db/database');
+const { all, get, runSync, transaction } = require('../db/database');
+const numberSeries = require('../services/numberSeriesService');
 const { orderColumns, orderItemColumns } = require('../db/columns');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit, logAuditSync } = require('../services/auditService');
-const { INVOICE_PREFIX } = require('../config/brand');
 const { toPaise, fromPaise } = require('../utils/money');
 const { getSetting } = require('../services/settingsService');
 
@@ -14,15 +14,6 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
-// Invoice Number INV-XXXX. Call inside the order transaction so it can't be handed out twice.
-// (Phase 1 step 5 replaces this with the configurable number-series engine.)
-function generateInvoiceNumber() {
-  const lastOrder = getSync("SELECT id FROM orders ORDER BY id DESC LIMIT 1");
-  const countRow = getSync("SELECT COUNT(*) as count FROM orders");
-  const nextSeq = Math.max(lastOrder ? lastOrder.id + 1 : 1, (countRow ? countRow.count : 0) + 1);
-  const seqPadded = String(nextSeq).padStart(4, '0');
-  return `${INVOICE_PREFIX}${seqPadded}`;
-}
 
 // POST /api/orders - Create New Bill
 router.post('/', async (req, res) => {
@@ -134,11 +125,12 @@ router.post('/', async (req, res) => {
     }
 
     const metadataStr = metadata ? JSON.stringify(metadata) : null;
-    const nowIso = new Date().toISOString();
+    const now = new Date();
+    const nowIso = now.toISOString();
 
     // Invoice number, order, lines and audit entry are saved all-or-nothing.
     const { orderId, invoiceNo } = transaction(() => {
-      const invoiceNo = generateInvoiceNumber();
+      const invoiceNo = numberSeries.allocate('INVOICE', now);
       const { lastInsertRowid: orderId } = runSync(
         `INSERT INTO orders
          (order_number, invoice_no, user_id, customer_id, subtotal_paise, discount_paise, final_amount_paise,

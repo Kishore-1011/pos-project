@@ -1,20 +1,14 @@
 const express = require('express');
-const { all, get, run } = require('../db/database');
+const { all, get, run, runSync, transaction } = require('../db/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
-const { logAudit } = require('../services/auditService');
+const { logAudit, logAuditSync } = require('../services/auditService');
+const numberSeries = require('../services/numberSeriesService');
 const { orderColumns } = require('../db/columns');
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
-// Helper to generate sequential Customer Code: CUST-XXXX
-async function generateCustomerCode() {
-  const lastCust = await get("SELECT id FROM customers ORDER BY id DESC LIMIT 1");
-  const countRow = await get("SELECT COUNT(*) as count FROM customers");
-  const nextSeq = Math.max(lastCust ? lastCust.id + 1 : 1, (countRow ? countRow.count : 0) + 1);
-  return `CUST-${String(nextSeq).padStart(4, '0')}`;
-}
 
 // GET /api/customers - Search / Autocomplete & Reporting List
 router.get('/', async (req, res) => {
@@ -196,23 +190,25 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const customerCode = await generateCustomerCode();
-
-    const insertRes = await run(
-      `INSERT INTO customers (customer_code, name, phone, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
-      [customerCode, cleanName, cleanPhone]
-    );
-
-    const newCustomer = await get("SELECT * FROM customers WHERE id = ?", [insertRes.lastInsertRowid]);
-
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: 'CUSTOMER_CREATE',
-      entityType: 'customer',
-      entityId: newCustomer.id,
-      newValue: { customer_code: newCustomer.customer_code, name: newCustomer.name, phone: newCustomer.phone }
+    // Customer code (from the CUSTOMER number series), the record and its audit entry save together
+    const newId = transaction(() => {
+      const customerCode = numberSeries.allocate('CUSTOMER');
+      const { lastInsertRowid } = runSync(
+        `INSERT INTO customers (customer_code, name, phone, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+        [customerCode, cleanName, cleanPhone]
+      );
+      logAuditSync({
+        userId: req.user.id,
+        userName: req.user.username,
+        action: 'CUSTOMER_CREATE',
+        entityType: 'customer',
+        entityId: lastInsertRowid,
+        newValue: { customer_code: customerCode, name: cleanName, phone: cleanPhone }
+      });
+      return lastInsertRowid;
     });
+
+    const newCustomer = await get("SELECT * FROM customers WHERE id = ?", [newId]);
 
     return res.status(201).json({ customer: newCustomer, existing: false });
   } catch (err) {
