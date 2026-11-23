@@ -1,12 +1,12 @@
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const { get, run } = require('./database');
-const { initSchema } = require('./schema');
+const { migrate } = require('./migrate');
 const { getUploadsDirectory } = require('../config/paths');
 
-// Creates the schema and the default admin account if missing. Never deletes data.
+// Applies database migrations and creates the default admin account if missing. Never deletes data.
 async function resetAndSeed() {
-  await initSchema();
+  migrate();
 
   const uploadsDir = getUploadsDirectory();
   if (!fs.existsSync(uploadsDir)) {

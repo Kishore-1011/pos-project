@@ -7,6 +7,9 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../services/auditService');
 const { getUploadsDirectory } = require('../config/paths');
 const { toPaise, fromPaise } = require('../utils/money');
+const { itemColumns } = require('../db/columns');
+
+const ITEM_BY_ID_SQL = `SELECT ${itemColumns('i')} FROM items i WHERE i.id = ?`;
 const crypto = require('crypto');
 
 const router = express.Router();
@@ -63,7 +66,7 @@ router.get('/', async (req, res) => {
   try {
     const { activeOnly } = req.query;
     let sql = `
-      SELECT i.id, i.name, i.price, i.image_url, i.category_id, i.is_active, c.name as category_name
+      SELECT i.id, i.name, i.price_paise / 100.0 AS price, i.image_url, i.category_id, i.is_active, c.name as category_name
       FROM items i
       LEFT JOIN categories c ON i.category_id = c.id
     `;
@@ -101,11 +104,11 @@ router.post('/', requireRole('ADMIN'), upload.single('image'), async (req, res) 
     }
 
     const result = await run(
-      `INSERT INTO items (name, price, category_id, image_url, is_active) VALUES (?, ?, ?, ?, 1)`,
-      [name.trim(), cleanPrice, category_id ? parseInt(category_id, 10) : null, finalImgUrl]
+      `INSERT INTO items (name, price_paise, category_id, image_url, is_active) VALUES (?, ?, ?, ?, 1)`,
+      [name.trim(), toPaise(cleanPrice), category_id ? parseInt(category_id, 10) : null, finalImgUrl]
     );
 
-    const newItem = await get("SELECT * FROM items WHERE id = ?", [result.lastInsertRowid]);
+    const newItem = await get(ITEM_BY_ID_SQL, [result.lastInsertRowid]);
 
     await logAudit({
       userId: req.user.id,
@@ -129,7 +132,7 @@ router.put('/:id', requireRole('ADMIN'), upload.single('image'), async (req, res
     const itemId = parseInt(req.params.id, 10);
     const { name, price, category_id, image_url } = req.body;
 
-    const oldItem = await get("SELECT * FROM items WHERE id = ?", [itemId]);
+    const oldItem = await get(ITEM_BY_ID_SQL, [itemId]);
     if (!oldItem) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -149,11 +152,11 @@ router.put('/:id', requireRole('ADMIN'), upload.single('image'), async (req, res
     }
 
     await run(
-      `UPDATE items SET name = ?, price = ?, category_id = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [newName, newPrice, newCatId, newImgUrl, itemId]
+      `UPDATE items SET name = ?, price_paise = ?, category_id = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [newName, toPaise(newPrice), newCatId, newImgUrl, itemId]
     );
 
-    const updatedItem = await get("SELECT * FROM items WHERE id = ?", [itemId]);
+    const updatedItem = await get(ITEM_BY_ID_SQL, [itemId]);
 
     await logAudit({
       userId: req.user.id,
@@ -178,7 +181,7 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
     const itemId = parseInt(req.params.id, 10);
     const { is_active } = req.body;
 
-    const oldItem = await get("SELECT * FROM items WHERE id = ?", [itemId]);
+    const oldItem = await get(ITEM_BY_ID_SQL, [itemId]);
     if (!oldItem) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -188,7 +191,7 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
       [is_active ? 1 : 0, itemId]
     );
 
-    const updatedItem = await get("SELECT * FROM items WHERE id = ?", [itemId]);
+    const updatedItem = await get(ITEM_BY_ID_SQL, [itemId]);
 
     await logAudit({
       userId: req.user.id,
@@ -228,7 +231,7 @@ router.patch('/bulk', requireRole('ADMIN'), async (req, res) => {
     const updatedItems = [];
 
     for (const id of ids) {
-      const oldItem = await get("SELECT * FROM items WHERE id = ?", [id]);
+      const oldItem = await get(ITEM_BY_ID_SQL, [id]);
       if (!oldItem) continue;
 
       let newPrice = oldItem.price;
@@ -259,10 +262,10 @@ router.patch('/bulk', requireRole('ADMIN'), async (req, res) => {
         }
         newPrice = Math.round(newPrice * 100) / 100;
         auditAction = 'ITEM_PRICE_BULK';
-        await run("UPDATE items SET price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [newPrice, id]);
+        await run("UPDATE items SET price_paise = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [toPaise(newPrice), id]);
       }
 
-      const updated = await get("SELECT * FROM items WHERE id = ?", [id]);
+      const updated = await get(ITEM_BY_ID_SQL, [id]);
       updatedItems.push(updated);
 
       await logAudit({

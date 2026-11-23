@@ -11,7 +11,10 @@ dist/
 # Local runtime data (created on first run; never commit)
 .jwt_secret
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
+backups/
 server/uploads/items/*
 !server/uploads/items/.gitkeep
 crash.log

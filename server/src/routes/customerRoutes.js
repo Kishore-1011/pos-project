@@ -2,6 +2,7 @@ const express = require('express');
 const { all, get, run } = require('../db/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../services/auditService');
+const { orderColumns } = require('../db/columns');
 
 const router = express.Router();
 
@@ -31,7 +32,7 @@ router.get('/', async (req, res) => {
           COALESCE(c.is_active, 1) as is_active,
           c.created_at,
           COUNT(CASE WHEN o.payment_status = 'PAID' THEN o.id END) as total_orders,
-          ROUND(COALESCE(SUM(CASE WHEN o.payment_status = 'PAID' THEN o.final_amount ELSE 0 END), 0), 2) as total_spend,
+          ROUND(COALESCE(SUM(CASE WHEN o.payment_status = 'PAID' THEN o.final_amount_paise ELSE 0 END), 0) / 100.0, 2) as total_spend,
           MAX(CASE WHEN o.payment_status = 'PAID' THEN o.created_at END) as last_visit
         FROM customers c
         LEFT JOIN orders o ON c.id = o.customer_id
@@ -75,7 +76,7 @@ router.get('/', async (req, res) => {
       const summaryStats = await get(`
         SELECT 
           COUNT(DISTINCT c.id) as total_customers,
-          ROUND(COALESCE(SUM(CASE WHEN o.payment_status = 'PAID' THEN o.final_amount ELSE 0 END), 0), 2) as total_customer_revenue,
+          ROUND(COALESCE(SUM(CASE WHEN o.payment_status = 'PAID' THEN o.final_amount_paise ELSE 0 END), 0) / 100.0, 2) as total_customer_revenue,
           COUNT(CASE WHEN o.payment_status = 'PAID' THEN o.id END) as total_customer_orders
         FROM customers c
         LEFT JOIN orders o ON c.id = o.customer_id
@@ -137,7 +138,7 @@ router.get('/:id', async (req, res) => {
         c.phone, 
         c.created_at,
         COUNT(CASE WHEN o.payment_status = 'PAID' THEN o.id END) as total_orders,
-        ROUND(COALESCE(SUM(CASE WHEN o.payment_status = 'PAID' THEN o.final_amount ELSE 0 END), 0), 2) as total_spend,
+        ROUND(COALESCE(SUM(CASE WHEN o.payment_status = 'PAID' THEN o.final_amount_paise ELSE 0 END), 0) / 100.0, 2) as total_spend,
         MAX(CASE WHEN o.payment_status = 'PAID' THEN o.created_at END) as last_visit
        FROM customers c
        LEFT JOIN orders o ON c.id = o.customer_id
@@ -151,7 +152,7 @@ router.get('/:id', async (req, res) => {
     }
 
     const orders = await all(
-      `SELECT o.*, 
+      `SELECT ${orderColumns('o')},
               u.full_name as cashier_name,
               (SELECT GROUP_CONCAT(oi.item_name || ' (x' || oi.quantity || ')', ', ') FROM order_items oi WHERE oi.order_id = o.id) as items_summary,
               (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.order_id = o.id) as total_items_count

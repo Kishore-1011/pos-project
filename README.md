@@ -3,7 +3,7 @@
 Offline-first point-of-sale for Indian food and retail shops, delivered as a Windows desktop app.
 "POS Project" is a working name. Change it in `client/src/config/brand.js`, `server/src/config/brand.js` and the root `package.json` build block.
 
-Stack: React 19 + Vite + Tailwind (`client/`), Express + SQLite via sql.js (`server/`), Electron + NSIS installer (`electron/`).
+Stack: React 19 + Vite + Tailwind (`client/`), Express + SQLite via better-sqlite3 (`server/`), Electron + NSIS installer (`electron/`).
 
 ## Structure
 
@@ -16,7 +16,7 @@ client/src/
   views/                Billing, Invoices, Customers, Items/Categories, Users, EOD report, Audit log
 server/src/
   config/               brand.js, paths.js (DB + uploads location)
-  db/                   sql.js wrapper, schema, first-run seed (admin account)
+  db/                   better-sqlite3 wrapper, numbered migrations/, columns.js (paise -> rupees), first-run seed
   routes/               auth, users, items, categories, customers, orders, reports, audit-logs
   middleware/auth.js    JWT + role guard
 docs/PRODUCT_ANALYSIS.md  Findings and roadmap
@@ -46,6 +46,8 @@ npm --prefix server test
 ```
 
 The database (`server/pos_project.db`) and uploads (`server/uploads/items/`) are created on first run and are git-ignored.
+On start, pending database migrations run automatically; if the database already has data, a copy is saved to `backups/` next to it first.
+Money is stored as integer paise (`*_paise` columns); the API returns rupees.
 In the desktop app they live in `%APPDATA%\pos-project\`.
 
 First login is `admin` / `admin123`. Change it immediately. A first-run setup wizard is planned.

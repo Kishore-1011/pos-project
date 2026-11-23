@@ -1,22 +1,22 @@
 # POS Project Roadmap
 
-Scope: Indian food **and** retail shops, Windows desktop first, web/cloud later.
+Scope (v1): Indian **food, retail and service** businesses, Windows desktop first, web/cloud later.
 Estimates assume one developer. Phases are in dependency order.
 Bug details are in [PRODUCT_ANALYSIS.md](PRODUCT_ANALYSIS.md).
 
 | Phase | Theme | Estimate | Status |
 |---|---|---|---|
 | 0 | Safety & correct billing | ~1 wk | Done (2026-11-23) |
-| 1 | Foundation refactor | ~2 wk | |
-| 2 | Setup & Shop Settings | ~1 wk | |
-| 3 | Catalog for food & retail | ~2 wk | |
+| 1 | Foundation: DB, series, FY/time zone, roles & permissions | ~3 wk | In progress |
+| 2 | Setup wizard & Settings screens | ~1.5 wk | |
+| 3 | Catalog for food, retail & services | ~2 wk | |
 | 4 | Billing upgrades | ~2 wk | |
 | 5 | Printing & hardware | ~1 wk | |
 | 6 | Operations & reports | ~1.5 wk | |
 | 7 | Release-ready product | ~1.5 wk | |
-| Later | Web / cloud | | |
+| Later | v2 features, web / cloud | | |
 
-Phases 0–2 (about 4 weeks) give a safe, rebranded base that can be installed at a pilot shop.
+Phases 0–2 (about 5.5 weeks) give a safe, configurable base that can be installed at a pilot shop.
 
 ---
 
@@ -39,68 +39,101 @@ Phases 0–2 (about 4 weeks) give a safe, rebranded base that can be installed a
 - Uploads: JPEG/PNG/WebP/GIF only, extension from the real type, served with `nosniff`; multer 2.x.
 - Reports: money totals rounded to 2 decimals.
 
-Carried forward: the screen to edit the cashier discount cap, and replacing `admin123` with a setup wizard, both in Phase 2. Integer-paise DB columns are in Phase 1.
+Carried forward: the screen to edit the cashier discount cap (now a per-role permission limit, Phase 1–2) and replacing `admin123` with a setup wizard (Phase 2).
 
-## Phase 1: Foundation refactor
-- Replace `sql.js` with `better-sqlite3` (real on-disk DB with transactions; native build via electron-builder `install-app-deps`).
-- Versioned migrations folder (replaces `ALTER TABLE` in try/catch); money columns as integer paise.
-- Atomic invoice numbering with a financial-year series (e.g. `INV/25-26/0001`), as GST requires.
-- Shared frontend API client (removes hard-coded `localhost:5000`).
-- Split the 800–1,400-line views into components; billing maths in a pure, tested module.
-- Linting and GitHub Actions CI.
+## Phase 1: Foundation
+Data model and server logic only; the screens for these come in Phase 2.
 
-**Done when:** a 10,000-order DB stays fast, a crash mid-order leaves no partial bill, and CI is green.
+1. **DB engine.** Replace `sql.js` with `better-sqlite3` (on-disk, transactions). Existing DB files open as-is, since both use the SQLite file format. Day-1 trial: confirm prebuilt binaries for the dev Node version and for Electron; upgrade Electron to a current version.
+2. **Migrations.** Numbered steps in `server/src/db/migrations/` plus a `schema_migrations` table. `001` = today's schema; later steps convert money columns to integer paise and add the tables below.
+3. **Organization.** Legal and trade name, address, city, state (GST state code), PIN, phone, email, logo. Business type: Food / Retail / Services (one or more).
+4. **Tax & registrations.** GSTIN and registration type (Regular / Composition / Unregistered → "Bill of Supply"), PAN. A list of licences (FSSAI, Drug licence, Shop & Establishment, Trade, Other), each with a number and a "print on bill" switch. FSSAI is suggested when the business type includes Food.
+5. **Number series** (v1: Invoice and Customer). Prefix, suffix, padding, optional FY token, reset rule (never / financial year / yearly / monthly / daily), next number, preview. Allocated inside a transaction, so numbers are never duplicated. Invoices follow GST rules: ≤16 characters, letters/digits/`-`/`/` only, unique within the FY. Defaults: `INV/{FY}/{0001}` resetting every April; `CUST-{0001}` never resetting.
+6. **Time zone, financial year, business day.** Time zone setting (default Asia/Kolkata) replaces the hard-coded `+5:30` in about 15 queries. FY start month (default April). Business-day cutoff (e.g. 02:00 for late-night food shops).
+7. **Users, roles & permissions.** User profile: full name, username, phone, email, role, active, 4-digit PIN, last login; self password change and admin reset. Built-in roles with editable permissions: Owner, Manager, Cashier. About 15 permissions:
+   - Billing: create bills, give discounts (with a max %), change price at billing, void, restore a void, reprint.
+   - Catalog & customers: manage items and categories, manage customers, export customers.
+   - Admin: view reports, view audit log, manage users, manage settings.
 
-## Phase 2: Setup & Shop Settings
-- First-run wizard: shop name, address, phone, logo, GSTIN, GST type (regular/composition), business type (Food/Retail/Both), admin password.
-- Settings: invoice prefix, receipt footer, receipt width (58/80 mm), feature toggles (stock, tables, modifiers), cashier discount cap.
-- 4-digit cashier PIN login for quick switching; no default `admin123`.
+   The server checks the permission on every request (replaces `requireRole`); the UI hides what a user can't open. Migration maps ADMIN → Owner and CASHIER → Cashier.
+8. **Price change at billing (data side).** Per-item flag "allow price change at billing", plus the permission above. Order lines store both catalog price and charged price, and every change is audited. The billing screen part is in Phase 4.
+9. **Code health.** Shared client API helper; split the 800–1,400-line views; billing maths in a pure, tested module; linter; GitHub Actions running the tests on every push.
 
-**Done when:** a fresh install has no hard-coded shop details and receipts show the shop's own header.
+**Done when:** an existing DB upgrades itself on launch; concurrent bills get correct, unique FY-series numbers; daily reports respect the time zone and cutoff; every route is permission-checked; CI is green.
 
-## Phase 3: Catalog for food & retail
-- SKU, barcode, unit (pcs/kg/g/L/ml), so weighed and decimal quantities work.
+**Progress**
+- [x] 1–2 Engine switch, migrations, paise columns (2026-11-23). `better-sqlite3` 13.2 (WAL, `synchronous=FULL`, foreign keys enforced). Migrations `001_baseline`, `002_money_paise`, `003_indexes` run on start, with an automatic backup to `backups/` first; links are checked after upgrading and orphan rows are reported, not dropped. An order, its lines and its audit entry save in one transaction. Money stored as integer paise; API still returns rupees (`server/src/db/columns.js`). Tests: 28 passing, including a legacy-DB upgrade, a simulated crash mid-bill, and 10,000+ orders (bill save ~3.5 ms, order list ~10 ms, month report ~110 ms). A real Phase-0 dev DB upgraded cleanly. Not yet run inside the Electron window (Electron download pending).
+- [ ] 3–4 Organization, tax & licences
+- [ ] 5 Number series engine
+- [ ] 6 Time zone, FY, business day
+- [ ] 7 Users, roles & permissions
+- [ ] 8 Price change at billing (data side)
+- [ ] 9 Code health & CI
+
+## Phase 2: Setup wizard & Settings screens
+- First-run wizard: Business → Address → Tax & licences → Business type → Number series (defaults pre-filled) → Owner account. No default `admin123`.
+- Settings screens (admin only, every change audited):
+  - Organization: name, address, contacts, logo.
+  - Tax & Compliance: GSTIN, registration type, state, PAN, licences.
+  - Number Series: invoice and customer series, with live preview.
+  - Region & Year: time zone, FY start, business-day cutoff, date format.
+  - Receipt: 58/80 mm, header/footer text, what to print (GSTIN, licences, customer).
+  - Users: add/edit, reset password or PIN, activate/deactivate.
+  - Roles & Permissions: permission grid for the built-in roles, including discount limits.
+- 4-digit PIN login for quick user switching.
+
+**Done when:** a fresh install has no hard-coded shop details and receipts show the shop's own header, GSTIN and selected licences.
+
+## Phase 3: Catalog for food, retail & services
+- SKU, barcode, unit (pcs/kg/g/L/ml/hr), so weighed and decimal quantities work.
+- Item type: goods or service (services have no stock and use SAC instead of HSN).
 - HSN/SAC and GST rate per item (default from category); tax-inclusive or tax-exclusive pricing.
 - Food: variants (Half/Full, S/M/L) and add-ons.
-- Retail: stock tracking per item, low-stock alerts, stock adjustments with reason, purchase entry.
+- Retail: stock tracking per item, low-stock alerts, stock adjustments with reason.
 - CSV import/export of the catalog.
 
 ## Phase 4: Billing upgrades
-- GST breakup (CGST/SGST) on the bill, round-off to nearest rupee, Bill of Supply for composition dealers.
+- GST breakup (CGST/SGST) on the bill, round-off to nearest rupee, Bill of Supply for composition and unregistered businesses.
+- Change a line's price at billing (open-price items), when the item and the user's permission allow it.
 - Barcode scanner input; keyboard shortcuts (search, qty, pay, print).
 - Hold / park bills.
 - Split payment (e.g. ₹200 cash + ₹300 UPI).
-- Returns/refunds as credit notes linked to the original bill.
 - Dynamic UPI QR (amount pre-filled) on screen and receipt.
 - Food: order type (dine-in/takeaway/parcel), optional table number.
 
 ## Phase 5: Printing & hardware
 - Direct ESC/POS thermal printing over USB/network (no browser print dialog).
 - Cash drawer kick on cash sales.
-- Kitchen order tickets (KOT) for food shops.
 - Needs 1–2 real printer models to test.
 
 ## Phase 6: Operations & reports
 - Shift open/close with opening cash and drawer count (expected vs. counted).
 - Reports: daily, item-wise, category-wise, staff-wise, payment mode, discounts/voids, stock.
-- GST summary by rate and HSN for GSTR-1/3B; Excel/CSV export.
+- GST summary by rate and HSN/SAC for GSTR-1/3B; Excel/CSV export.
 - Automatic daily backup, restore from file, optional backup to a Google Drive/OneDrive folder.
 
 ## Phase 7: Release-ready product
 - Code-signed installer and auto-update via GitHub Releases.
 - Crash reporting, About/version screen.
 - Licence/activation key (if sold).
-- Optional demo data (food menu / retail catalog), user guide, onboarding tips.
+- Optional demo data (food menu / retail catalog / services), user guide, onboarding tips.
 - Needs the final product name.
 
-## Later: Web / cloud
-Cloud sync, multiple counters on a LAN, online owner dashboard, multi-branch. Phase 1 keeps the API separate so this needs no rewrite.
+## Later (v2+)
+- Refunds / returns as credit notes (with a Credit Note series).
+- Kitchen order tickets (KOT) with a daily KOT series.
+- Purchase entry and supplier records (with a Purchase series).
+- Custom roles (beyond editing the built-in ones).
+- Web / cloud: cloud sync, multiple counters on a LAN, online owner dashboard, multi-branch. Phase 1 keeps the API separate so this needs no rewrite.
 
 ---
 
+## Decisions
+- 2026-11-23: v1 covers food, retail and services; Phase 1 grows to ~3 weeks; credit notes, KOT, purchase and custom roles move to v2.
+
 ## Open decisions
-- GST: support both regular and composition dealers? (Recommended: yes.)
-- Pilot shops: one food, one retail.
+- GST: support both regular and composition dealers? (Recommended: yes; planned that way.)
+- Pilot shops: one food, one retail, ideally one service business.
 - Printer models for Phase 5.
 - Pricing: one-time licence or subscription (Phase 7).
 - Final product name (before Phase 7).

@@ -1,7 +1,8 @@
 const express = require('express');
-const { all, get, run } = require('../db/database');
+const { all, get, run, getSync, runSync, transaction } = require('../db/database');
+const { orderColumns, orderItemColumns } = require('../db/columns');
 const { authenticateToken, requireRole } = require('../middleware/auth');
-const { logAudit } = require('../services/auditService');
+const { logAudit, logAuditSync } = require('../services/auditService');
 const { INVOICE_PREFIX } = require('../config/brand');
 const { toPaise, fromPaise } = require('../utils/money');
 const { getSetting } = require('../services/settingsService');
@@ -13,10 +14,11 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
-// Helper function to generate compact Invoice Number: INV-XXXX
-async function generateInvoiceNumber() {
-  const lastOrder = await get("SELECT id FROM orders ORDER BY id DESC LIMIT 1");
-  const countRow = await get("SELECT COUNT(*) as count FROM orders");
+// Invoice Number INV-XXXX. Call inside the order transaction so it can't be handed out twice.
+// (Phase 1 step 5 replaces this with the configurable number-series engine.)
+function generateInvoiceNumber() {
+  const lastOrder = getSync("SELECT id FROM orders ORDER BY id DESC LIMIT 1");
+  const countRow = getSync("SELECT COUNT(*) as count FROM orders");
   const nextSeq = Math.max(lastOrder ? lastOrder.id + 1 : 1, (countRow ? countRow.count : 0) + 1);
   const seqPadded = String(nextSeq).padStart(4, '0');
   return `${INVOICE_PREFIX}${seqPadded}`;
@@ -63,7 +65,7 @@ router.post('/', async (req, res) => {
       const itemId = Number(line && line.item_id);
       const dbItem = Number.isInteger(itemId)
         ? await get(
-            `SELECT i.id, i.name, i.price, i.is_active, c.is_active AS category_active
+            `SELECT i.id, i.name, i.price_paise, i.is_active, c.is_active AS category_active
              FROM items i LEFT JOIN categories c ON c.id = i.category_id
              WHERE i.id = ?`,
             [itemId]
@@ -83,16 +85,16 @@ router.post('/', async (req, res) => {
         });
       }
 
-      const unitPaise = toPaise(dbItem.price);
+      const unitPaise = dbItem.price_paise;
       const linePaise = unitPaise * qty;
       subtotalPaise += linePaise;
 
       lineItemsToInsert.push({
         item_id: dbItem.id,
         item_name: dbItem.name,
-        unit_price: fromPaise(unitPaise),
+        unit_price_paise: unitPaise,
         quantity: qty,
-        subtotal: fromPaise(linePaise)
+        subtotal_paise: linePaise
       });
     }
 
@@ -131,84 +133,61 @@ router.post('/', async (req, res) => {
       changePaise = receivedPaise - finalPaise;
     }
 
-    const subtotal = fromPaise(subtotalPaise);
-    const discountAmount = fromPaise(discountPaise);
-    const finalAmount = fromPaise(finalPaise);
-    const changeGiven = fromPaise(changePaise);
-
-    const invoiceNo = await generateInvoiceNumber();
     const metadataStr = metadata ? JSON.stringify(metadata) : null;
-
     const nowIso = new Date().toISOString();
 
-    // Run INSERT for the order with explicit ISO timestamp and customer_id
-    await run(
-      `INSERT INTO orders 
-       (order_number, invoice_no, user_id, customer_id, subtotal, discount, final_amount, payment_method, payment_status, cash_received, change_given, notes, metadata, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PAID', ?, ?, ?, ?, ?, ?)`,
-      [
-        invoiceNo,
-        invoiceNo,
-        req.user.id,
-        cleanCustomerId,
-        subtotal,
-        discountAmount,
-        finalAmount,
-        payment_method,
-        fromPaise(receivedPaise),
-        changeGiven,
-        cleanNotes,
-        metadataStr,
-        nowIso,
-        nowIso
-      ]
-    );
+    // Invoice number, order, lines and audit entry are saved all-or-nothing.
+    const { orderId, invoiceNo } = transaction(() => {
+      const invoiceNo = generateInvoiceNumber();
+      const { lastInsertRowid: orderId } = runSync(
+        `INSERT INTO orders
+         (order_number, invoice_no, user_id, customer_id, subtotal_paise, discount_paise, final_amount_paise,
+          payment_method, payment_status, cash_received_paise, change_given_paise, notes, metadata, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PAID', ?, ?, ?, ?, ?, ?)`,
+        [invoiceNo, invoiceNo, req.user.id, cleanCustomerId, subtotalPaise, discountPaise, finalPaise,
+         payment_method, receivedPaise, changePaise, cleanNotes, metadataStr, nowIso, nowIso]
+      );
 
-    // Fetch the newly created order directly with customer and cashier details
+      for (const item of lineItemsToInsert) {
+        runSync(
+          `INSERT INTO order_items (order_id, item_id, item_name, unit_price_paise, quantity, subtotal_paise)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [orderId, item.item_id, item.item_name, item.unit_price_paise, item.quantity, item.subtotal_paise]
+        );
+      }
+
+      logAuditSync({
+        userId: req.user.id,
+        userName: req.user.username,
+        action: 'ORDER_CREATE',
+        entityType: 'order',
+        entityId: orderId,
+        newValue: {
+          order_id: orderId,
+          order_number: invoiceNo,
+          invoice_no: invoiceNo,
+          total: fromPaise(finalPaise),
+          final_amount: fromPaise(finalPaise),
+          payment_method: payment_method,
+          customer_id: cleanCustomerId,
+          customer_name: customerInfo?.name || 'Walk-in / Guest',
+          items_count: lineItemsToInsert.length
+        }
+      });
+
+      return { orderId, invoiceNo };
+    });
+
     const createdOrder = await get(
-      `SELECT o.*, u.full_name as cashier_name, u.username as cashier_username,
+      `SELECT ${orderColumns('o')}, u.full_name as cashier_name, u.username as cashier_username,
               c.customer_code, c.name as customer_name, c.phone as customer_phone
        FROM orders o
        JOIN users u ON o.user_id = u.id
        LEFT JOIN customers c ON o.customer_id = c.id
-       WHERE o.order_number = ? OR o.invoice_no = ?`,
-      [invoiceNo, invoiceNo]
+       WHERE o.id = ?`,
+      [orderId]
     );
-    const orderId = createdOrder ? createdOrder.id : null;
-
-    if (!orderId) {
-      throw new Error('Failed to retrieve newly created order record');
-    }
-
-    for (const item of lineItemsToInsert) {
-      await run(
-        `INSERT INTO order_items (order_id, item_id, item_name, unit_price, quantity, subtotal)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [orderId, item.item_id, item.item_name, item.unit_price, item.quantity, item.subtotal]
-      );
-    }
-
-    const insertedLineItems = await all("SELECT * FROM order_items WHERE order_id = ?", [orderId]);
-
-    // Audit Log with the real primary key ID and Customer Info
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: 'ORDER_CREATE',
-      entityType: 'order',
-      entityId: orderId,
-      newValue: {
-        order_id: orderId,
-        order_number: invoiceNo,
-        invoice_no: invoiceNo,
-        total: finalAmount,
-        final_amount: finalAmount,
-        payment_method: payment_method,
-        customer_id: cleanCustomerId,
-        customer_name: customerInfo?.name || 'Walk-in / Guest',
-        items_count: lineItemsToInsert.length
-      }
-    });
+    const insertedLineItems = await all(`SELECT ${orderItemColumns('oi')} FROM order_items oi WHERE oi.order_id = ?`, [orderId]);
 
     return res.status(201).json({
       order: {
@@ -325,7 +304,7 @@ router.get('/', async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     const dataSql = `
-      SELECT o.*, 
+      SELECT ${orderColumns('o')},
              u.full_name as staff_name,
              u.full_name as cashier_name, 
              u.username as cashier_username,
@@ -368,7 +347,7 @@ router.get('/:id', async (req, res) => {
   try {
     const orderId = parseInt(req.params.id, 10);
     const order = await get(
-      `SELECT o.*, u.full_name as cashier_name, u.username as cashier_username,
+      `SELECT ${orderColumns('o')}, u.full_name as cashier_name, u.username as cashier_username,
               c.customer_code, c.name as customer_name, c.phone as customer_phone
        FROM orders o
        JOIN users u ON o.user_id = u.id
@@ -381,7 +360,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    const items = await all("SELECT * FROM order_items WHERE order_id = ?", [orderId]);
+    const items = await all(`SELECT ${orderItemColumns('oi')} FROM order_items oi WHERE oi.order_id = ?`, [orderId]);
     return res.json({ order, items });
   } catch (err) {
     console.error('Get Order Detail Error:', err);
@@ -419,25 +398,26 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
       });
     }
 
-    await run(
-      `UPDATE orders SET payment_status = ?, void_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [status, isVoiding ? reason : oldOrder.void_reason, orderId]
-    );
-
-    const updatedOrder = await get("SELECT * FROM orders WHERE id = ?", [orderId]);
-
     const actionType = isVoiding ? 'VOID_ORDER' : (isUnvoiding ? 'UNVOID_ORDER' : 'STATUS_CHANGE');
 
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: actionType,
-      entityType: 'order',
-      entityId: orderId,
-      oldValue: { payment_status: oldOrder.payment_status },
-      newValue: { payment_status: updatedOrder.payment_status, reason: reason || null }
+    // Status change and its audit entry are saved together.
+    transaction(() => {
+      runSync(
+        `UPDATE orders SET payment_status = ?, void_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [status, isVoiding ? reason : oldOrder.void_reason, orderId]
+      );
+      logAuditSync({
+        userId: req.user.id,
+        userName: req.user.username,
+        action: actionType,
+        entityType: 'order',
+        entityId: orderId,
+        oldValue: { payment_status: oldOrder.payment_status },
+        newValue: { payment_status: status, reason: reason || null }
+      });
     });
 
+    const updatedOrder = await get(`SELECT ${orderColumns('o')} FROM orders o WHERE o.id = ?`, [orderId]);
     return res.json(updatedOrder);
   } catch (err) {
     console.error('Update Order Status Error:', err);

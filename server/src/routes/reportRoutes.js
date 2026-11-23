@@ -19,21 +19,21 @@ router.get('/eod', async (req, res) => {
     const summary = await get(
       `SELECT 
         COUNT(CASE WHEN payment_status = 'PAID' THEN 1 END) as paid_orders_count,
-        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN final_amount ELSE 0 END), 0), 2) as total_revenue,
-        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN discount ELSE 0 END), 0), 2) as total_discounts,
+        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN final_amount_paise ELSE 0 END), 0) / 100.0, 2) as total_revenue,
+        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN discount_paise ELSE 0 END), 0) / 100.0, 2) as total_discounts,
         COUNT(CASE WHEN payment_status = 'VOID' THEN 1 END) as void_orders_count,
-        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'VOID' THEN final_amount ELSE 0 END), 0), 2) as void_revenue,
+        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'VOID' THEN final_amount_paise ELSE 0 END), 0) / 100.0, 2) as void_revenue,
         COUNT(CASE WHEN payment_status = 'PAID' AND customer_id IS NOT NULL THEN 1 END) as customer_orders_count,
-        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' AND customer_id IS NOT NULL THEN final_amount ELSE 0 END), 0), 2) as customer_revenue,
+        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' AND customer_id IS NOT NULL THEN final_amount_paise ELSE 0 END), 0) / 100.0, 2) as customer_revenue,
         COUNT(CASE WHEN payment_status = 'PAID' AND customer_id IS NULL THEN 1 END) as guest_orders_count,
-        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' AND customer_id IS NULL THEN final_amount ELSE 0 END), 0), 2) as guest_revenue
+        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' AND customer_id IS NULL THEN final_amount_paise ELSE 0 END), 0) / 100.0, 2) as guest_revenue
        FROM orders
        WHERE date(created_at, '+5 hours', '+30 minutes') BETWEEN date(?) AND date(?)`,
       [start, end]
     );
 
     const paymentBreakdown = await all(
-      `SELECT payment_method, COUNT(*) as count, ROUND(COALESCE(SUM(final_amount), 0), 2) as amount
+      `SELECT payment_method, COUNT(*) as count, ROUND(COALESCE(SUM(final_amount_paise), 0) / 100.0, 2) as amount
        FROM orders
        WHERE payment_status = 'PAID' AND date(created_at, '+5 hours', '+30 minutes') BETWEEN date(?) AND date(?)
        GROUP BY payment_method`,
@@ -41,7 +41,7 @@ router.get('/eod', async (req, res) => {
     );
 
     const topItems = await all(
-      `SELECT oi.item_name, SUM(oi.quantity) as total_qty, ROUND(SUM(oi.subtotal), 2) as total_sales
+      `SELECT oi.item_name, SUM(oi.quantity) as total_qty, ROUND(SUM(oi.subtotal_paise) / 100.0, 2) as total_sales
        FROM order_items oi
        JOIN orders o ON oi.order_id = o.id
        WHERE o.payment_status = 'PAID' AND date(o.created_at, '+5 hours', '+30 minutes') BETWEEN date(?) AND date(?)
@@ -55,8 +55,8 @@ router.get('/eod', async (req, res) => {
       `SELECT 
         date(created_at, '+5 hours', '+30 minutes') as date,
         COUNT(CASE WHEN payment_status = 'PAID' THEN 1 END) as paid_orders_count,
-        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN final_amount ELSE 0 END), 0), 2) as total_revenue,
-        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN discount ELSE 0 END), 0), 2) as total_discounts,
+        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN final_amount_paise ELSE 0 END), 0) / 100.0, 2) as total_revenue,
+        ROUND(COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN discount_paise ELSE 0 END), 0) / 100.0, 2) as total_discounts,
         COUNT(CASE WHEN payment_status = 'PAID' AND customer_id IS NOT NULL THEN 1 END) as customer_orders,
         COUNT(CASE WHEN payment_status = 'PAID' AND customer_id IS NULL THEN 1 END) as guest_orders
        FROM orders
