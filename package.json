@@ -1,0 +1,63 @@
+{
+  "name": "pos-project",
+  "version": "1.0.1",
+  "description": "POS Project - Lightweight Offline Point-of-Sale System",
+  "main": "electron/main.js",
+  "author": "Kishore",
+  "scripts": {
+    "start": "electron .",
+    "build:client": "npm --prefix client run build",
+    "build:exe": "npm run build:client && electron-builder --win nsis",
+    "dist": "npm run build:exe"
+  },
+  "build": {
+    "appId": "com.posproject.app",
+    "productName": "POS Project",
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/node_modules/sqlite3/**/*",
+      "**/node_modules/better-sqlite3/**/*",
+      "**/node_modules/sql.js/**/*"
+    ],
+    "files": [
+      "**/*",
+      "!client/src/**/*",
+      "!client/public/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "POS Project",
+      "artifactName": "POS-Project-Setup.${ext}"
+    }
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "sql.js": "^1.12.0"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

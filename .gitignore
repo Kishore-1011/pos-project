@@ -1,0 +1,19 @@
+# Dependencies & build output
+node_modules/
+client/dist/
+client/.vite/
+dist/
+.vite/
+
+# Local secrets & environment
+.env
+
+# Local runtime data (created on first run; never commit)
+*.db
+*.sqlite
+server/uploads/items/*
+!server/uploads/items/.gitkeep
+crash.log
+
+# Large media
+*.mp4
