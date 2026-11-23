@@ -58,7 +58,8 @@ router.put('/:id', (req, res) => {
   if (!existing) return;
   try {
     users.checkCanManage(existing, req.user);
-    const { pin, password, ...profile } = req.body || {};
+    // PIN and password have their own endpoints; ignore them here
+    const { pin: _pin, password: _password, ...profile } = req.body || {};
     const out = users.validateUserInput(profile, { actor: req.user, existing });
     const changed = Object.keys(out).filter((k) => out[k] !== existing[k]);
     if (changed.length) {

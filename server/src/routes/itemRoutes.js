@@ -15,6 +15,14 @@ const upload = createImageUpload({ folder: 'items', prefix: 'item' });
 
 const MAX_PRICE = 10000000; // ₹1 crore sanity cap
 
+/** true/false from JSON or form fields ('true', '1', 'on' ...); undefined if absent; null if invalid. */
+function parseFlag(value) {
+  if (value === undefined) return undefined;
+  if (value === true || value === 1 || ['true', '1', 'on', 'yes'].includes(String(value).toLowerCase())) return true;
+  if (value === false || value === 0 || value === '' || ['false', '0', 'off', 'no'].includes(String(value).toLowerCase())) return false;
+  return null;
+}
+
 /** Parses a price input into rupees rounded to paise, or returns null if invalid. */
 function parsePrice(value) {
   const paise = toPaise(value);
@@ -29,7 +37,8 @@ router.get('/', async (req, res) => {
   try {
     const { activeOnly } = req.query;
     let sql = `
-      SELECT i.id, i.name, i.price_paise / 100.0 AS price, i.image_url, i.category_id, i.is_active, c.name as category_name
+      SELECT i.id, i.name, i.price_paise / 100.0 AS price, i.image_url, i.category_id, i.is_active,
+             i.allow_price_change, c.name as category_name
       FROM items i
       LEFT JOIN categories c ON i.category_id = c.id
     `;
@@ -56,9 +65,13 @@ router.post('/', requirePermission('items.manage'), upload.single('image'), asyn
   try {
     const { name, price, category_id, image_url } = req.body;
     const cleanPrice = parsePrice(price);
+    const allowPriceChange = parseFlag(req.body.allow_price_change);
 
     if (typeof name !== 'string' || !name.trim() || price === undefined || price === '' || cleanPrice === null) {
       return res.status(400).json({ error: 'Valid item name and non-negative price are required' });
+    }
+    if (allowPriceChange === null) {
+      return res.status(400).json({ error: 'allow_price_change must be true or false' });
     }
 
     let finalImgUrl = image_url ? image_url.trim() : null;
@@ -67,8 +80,8 @@ router.post('/', requirePermission('items.manage'), upload.single('image'), asyn
     }
 
     const result = await run(
-      `INSERT INTO items (name, price_paise, category_id, image_url, is_active) VALUES (?, ?, ?, ?, 1)`,
-      [name.trim(), toPaise(cleanPrice), category_id ? parseInt(category_id, 10) : null, finalImgUrl]
+      `INSERT INTO items (name, price_paise, category_id, image_url, is_active, allow_price_change) VALUES (?, ?, ?, ?, 1, ?)`,
+      [name.trim(), toPaise(cleanPrice), category_id ? parseInt(category_id, 10) : null, finalImgUrl, allowPriceChange ? 1 : 0]
     );
 
     const newItem = await get(ITEM_BY_ID_SQL, [result.lastInsertRowid]);
@@ -79,7 +92,10 @@ router.post('/', requirePermission('items.manage'), upload.single('image'), asyn
       action: 'ITEM_CREATE',
       entityType: 'item',
       entityId: newItem.id,
-      newValue: { name: newItem.name, price: newItem.price, category_id: newItem.category_id, image_url: newItem.image_url }
+      newValue: {
+        name: newItem.name, price: newItem.price, category_id: newItem.category_id, image_url: newItem.image_url,
+        allow_price_change: newItem.allow_price_change
+      }
     });
 
     return res.status(201).json(newItem);
@@ -106,7 +122,12 @@ router.put('/:id', requirePermission('items.manage'), upload.single('image'), as
     }
     const newName = typeof name === 'string' && name.trim() ? name.trim() : oldItem.name;
     const newCatId = category_id !== undefined ? (category_id ? parseInt(category_id, 10) : null) : oldItem.category_id;
-    
+    const flag = parseFlag(req.body.allow_price_change);
+    if (flag === null) {
+      return res.status(400).json({ error: 'allow_price_change must be true or false' });
+    }
+    const newAllowPriceChange = flag === undefined ? oldItem.allow_price_change : (flag ? 1 : 0);
+
     let newImgUrl = oldItem.image_url;
     if (req.file) {
       newImgUrl = `/uploads/items/${req.file.filename}`;
@@ -115,11 +136,15 @@ router.put('/:id', requirePermission('items.manage'), upload.single('image'), as
     }
 
     await run(
-      `UPDATE items SET name = ?, price_paise = ?, category_id = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [newName, toPaise(newPrice), newCatId, newImgUrl, itemId]
+      `UPDATE items SET name = ?, price_paise = ?, category_id = ?, image_url = ?, allow_price_change = ?,
+         updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [newName, toPaise(newPrice), newCatId, newImgUrl, newAllowPriceChange, itemId]
     );
 
     const updatedItem = await get(ITEM_BY_ID_SQL, [itemId]);
+    const snap = (i) => ({
+      name: i.name, price: i.price, category_id: i.category_id, image_url: i.image_url, allow_price_change: i.allow_price_change
+    });
 
     await logAudit({
       userId: req.user.id,
@@ -127,8 +152,8 @@ router.put('/:id', requirePermission('items.manage'), upload.single('image'), as
       action: 'PRICE_UPDATE',
       entityType: 'item',
       entityId: itemId,
-      oldValue: { name: oldItem.name, price: oldItem.price, category_id: oldItem.category_id, image_url: oldItem.image_url },
-      newValue: { name: updatedItem.name, price: updatedItem.price, category_id: updatedItem.category_id, image_url: updatedItem.image_url }
+      oldValue: snap(oldItem),
+      newValue: snap(updatedItem)
     });
 
     return res.json(updatedItem);

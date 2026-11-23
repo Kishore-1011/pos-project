@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Navbar } from './Navbar';
-import { ShoppingCart, FileText, Utensils, Users, ClipboardList, BarChart3, LogOut, ShieldAlert, UserCheck } from 'lucide-react';
+import { ShoppingCart, FileText, Utensils, Users, ClipboardList, BarChart3, LogOut, UserCheck } from 'lucide-react';
 import { PRODUCT_NAME, PRODUCT_SHORT } from '../config/brand';
 
 export function MainLayout({ activeTab, setActiveTab, searchQuery, setSearchQuery, searchInputRef, children }) {

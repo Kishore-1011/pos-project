@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["oxc", "node"],
+  "env": { "node": true, "es2024": true },
+  "categories": { "correctness": "error", "suspicious": "warn" },
+  "rules": {
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_|^next$|^req$|^res$", "varsIgnorePattern": "^_", "caughtErrors": "none" }],
+    "oxc/no-async-endpoint-handlers": "off"
+  }
+}

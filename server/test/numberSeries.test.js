@@ -146,7 +146,7 @@ test('format validation that always applies: period required when resetting, val
 });
 
 test('preview shows the next number without saving anything', async () => {
-  const before = (await t.call('GET', '/api/number-series', { token: admin })).body.series.find((s) => s.code === 'INVOICE');
+  const seriesBefore = (await t.call('GET', '/api/number-series', { token: admin })).body.series.find((s) => s.code === 'INVOICE');
   const p = await t.call('POST', '/api/number-series/INVOICE/preview', {
     token: admin, body: { prefix: 'GB', separator: '-', reset_policy: 'MONTHLY' }
   });
@@ -158,7 +158,7 @@ test('preview shows the next number without saving anything', async () => {
   assert.equal(bad.status, 400);
 
   const afterSeries = (await t.call('GET', '/api/number-series', { token: admin })).body.series.find((s) => s.code === 'INVOICE');
-  assert.equal(afterSeries.next_value, before.next_value, 'preview did not change anything');
+  assert.equal(afterSeries.next_value, seriesBefore.next_value, 'preview did not change anything');
 });
 
 test('changing the format applies to the next bill and is audited', async () => {
@@ -231,10 +231,10 @@ test('yearly, monthly and daily resets each start again at 0001', () => {
 });
 
 test('a failed save does not use up a number', async () => {
-  const before = series.peekNext('INVOICE').value;
+  const nextBefore = series.peekNext('INVOICE').value;
   const r = await t.call('POST', '/api/orders', {
     token: cashier, body: { items: [{ item_id: item.id, quantity: 1 }], payment_method: 'CASH', cash_received: 0 }
   });
   assert.equal(r.status, 400);
-  assert.equal(series.peekNext('INVOICE').value, before);
+  assert.equal(series.peekNext('INVOICE').value, nextBefore);
 });

@@ -9,8 +9,8 @@ class SettingError extends Error {
 
 function isValidTimeZone(tz) {
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz });
-    return true;
+    // Throws RangeError for an unknown zone
+    return Boolean(new Intl.DateTimeFormat('en-US', { timeZone: tz }).resolvedOptions().timeZone);
   } catch (e) {
     return false;
   }

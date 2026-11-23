@@ -2,6 +2,9 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 
+// Must run before any route file is loaded (routes are registered when their modules load)
+require('./utils/asyncRoutes').installAsyncErrorHandling();
+
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const itemRoutes = require('./routes/itemRoutes');

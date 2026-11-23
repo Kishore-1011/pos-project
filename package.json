@@ -8,7 +8,10 @@
     "start": "electron .",
     "build:client": "npm --prefix client run build",
     "build:exe": "npm run build:client && electron-builder --win nsis",
-    "dist": "npm run build:exe"
+    "dist": "npm run build:exe",
+    "lint": "npm --prefix server run lint && npm --prefix client run lint",
+    "test": "npm --prefix server test && npm --prefix client test",
+    "check": "npm run lint && npm test && npm run build:client"
   },
   "build": {
     "appId": "com.posproject.app",

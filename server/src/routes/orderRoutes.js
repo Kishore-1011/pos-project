@@ -4,11 +4,12 @@ const numberSeries = require('../services/numberSeriesService');
 const calendar = require('../services/calendar');
 const { orderColumns, orderItemColumns } = require('../db/columns');
 const { authenticateToken, requirePermission } = require('../middleware/auth');
-const { logAudit, logAuditSync } = require('../services/auditService');
+const { logAuditSync } = require('../services/auditService');
 const { toPaise, fromPaise } = require('../utils/money');
 
 const MAX_ORDER_LINES = 200;
 const MAX_LINE_QUANTITY = 10000;
+const MAX_UNIT_PRICE_PAISE = 10000000 * 100; // ₹1 crore, same cap as catalog prices
 
 const router = express.Router();
 
@@ -51,12 +52,13 @@ router.post('/', requirePermission('billing.create'), async (req, res) => {
     // Process line items and compute subtotal (in paise). Prices always come from the DB.
     let subtotalPaise = 0;
     const lineItemsToInsert = [];
+    const priceChanges = [];
 
     for (const line of items) {
       const itemId = Number(line && line.item_id);
       const dbItem = Number.isInteger(itemId)
         ? await get(
-            `SELECT i.id, i.name, i.price_paise, i.is_active, c.is_active AS category_active
+            `SELECT i.id, i.name, i.price_paise, i.is_active, i.allow_price_change, c.is_active AS category_active
              FROM items i LEFT JOIN categories c ON c.id = i.category_id
              WHERE i.id = ?`,
             [itemId]
@@ -76,7 +78,31 @@ router.post('/', requirePermission('billing.create'), async (req, res) => {
         });
       }
 
-      const unitPaise = dbItem.price_paise;
+      // Price comes from the catalog unless the line asks for a different one (open-price items)
+      const catalogPaise = dbItem.price_paise;
+      let unitPaise = catalogPaise;
+      let reason = null;
+      if (line.unit_price !== undefined && line.unit_price !== null && line.unit_price !== '') {
+        const requested = toPaise(line.unit_price);
+        if (Number.isNaN(requested) || requested < 0 || requested > MAX_UNIT_PRICE_PAISE) {
+          return res.status(400).json({ error: `Invalid price for "${dbItem.name}"` });
+        }
+        if (requested !== catalogPaise) {
+          if (dbItem.allow_price_change !== 1) {
+            return res.status(400).json({ error: `The price of "${dbItem.name}" can't be changed at billing` });
+          }
+          if (!req.can('billing.price_change')) {
+            return res.status(403).json({ error: 'You do not have permission to change prices at billing', required: ['billing.price_change'] });
+          }
+          if (line.price_change_reason !== undefined && line.price_change_reason !== null && typeof line.price_change_reason !== 'string') {
+            return res.status(400).json({ error: 'Price change reason must be text' });
+          }
+          unitPaise = requested;
+          reason = (line.price_change_reason || '').trim().slice(0, 200) || null;
+          priceChanges.push({ item_id: dbItem.id, item_name: dbItem.name, quantity: qty,
+            catalog_price: fromPaise(catalogPaise), charged_price: fromPaise(requested), reason });
+        }
+      }
       const linePaise = unitPaise * qty;
       subtotalPaise += linePaise;
 
@@ -84,6 +110,8 @@ router.post('/', requirePermission('billing.create'), async (req, res) => {
         item_id: dbItem.id,
         item_name: dbItem.name,
         unit_price_paise: unitPaise,
+        catalog_unit_price_paise: catalogPaise,
+        price_change_reason: reason,
         quantity: qty,
         subtotal_paise: linePaise
       });
@@ -136,22 +164,36 @@ router.post('/', requirePermission('billing.create'), async (req, res) => {
 
     // Invoice number, order, lines and audit entry are saved all-or-nothing.
     const { orderId, invoiceNo } = transaction(() => {
-      const invoiceNo = numberSeries.allocate('INVOICE', now);
-      const { lastInsertRowid: orderId } = runSync(
+      const newInvoiceNo = numberSeries.allocate('INVOICE', now);
+      const { lastInsertRowid: newOrderId } = runSync(
         `INSERT INTO orders
          (order_number, invoice_no, user_id, customer_id, subtotal_paise, discount_paise, final_amount_paise,
           payment_method, payment_status, cash_received_paise, change_given_paise, notes, metadata, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PAID', ?, ?, ?, ?, ?, ?)`,
-        [invoiceNo, invoiceNo, req.user.id, cleanCustomerId, subtotalPaise, discountPaise, finalPaise,
+        [newInvoiceNo, newInvoiceNo, req.user.id, cleanCustomerId, subtotalPaise, discountPaise, finalPaise,
          payment_method, receivedPaise, changePaise, cleanNotes, metadataStr, nowIso, nowIso]
       );
 
       for (const item of lineItemsToInsert) {
         runSync(
-          `INSERT INTO order_items (order_id, item_id, item_name, unit_price_paise, quantity, subtotal_paise)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [orderId, item.item_id, item.item_name, item.unit_price_paise, item.quantity, item.subtotal_paise]
+          `INSERT INTO order_items (order_id, item_id, item_name, unit_price_paise, catalog_unit_price_paise,
+             price_change_reason, quantity, subtotal_paise)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newOrderId, item.item_id, item.item_name, item.unit_price_paise, item.catalog_unit_price_paise,
+           item.price_change_reason, item.quantity, item.subtotal_paise]
         );
+      }
+
+      // Price changes get their own audit entry so they can be filtered and reviewed
+      if (priceChanges.length) {
+        logAuditSync({
+          userId: req.user.id,
+          userName: req.user.username,
+          action: 'BILL_PRICE_CHANGE',
+          entityType: 'order',
+          entityId: newOrderId,
+          newValue: { invoice_no: newInvoiceNo, lines: priceChanges }
+        });
       }
 
       logAuditSync({
@@ -159,21 +201,22 @@ router.post('/', requirePermission('billing.create'), async (req, res) => {
         userName: req.user.username,
         action: 'ORDER_CREATE',
         entityType: 'order',
-        entityId: orderId,
+        entityId: newOrderId,
         newValue: {
-          order_id: orderId,
-          order_number: invoiceNo,
-          invoice_no: invoiceNo,
+          order_id: newOrderId,
+          order_number: newInvoiceNo,
+          invoice_no: newInvoiceNo,
           total: fromPaise(finalPaise),
           final_amount: fromPaise(finalPaise),
           payment_method: payment_method,
           customer_id: cleanCustomerId,
           customer_name: customerInfo?.name || 'Walk-in / Guest',
-          items_count: lineItemsToInsert.length
+          items_count: lineItemsToInsert.length,
+          price_changes: priceChanges.length
         }
       });
 
-      return { orderId, invoiceNo };
+      return { orderId: newOrderId, invoiceNo: newInvoiceNo };
     });
 
     const createdOrder = await get(

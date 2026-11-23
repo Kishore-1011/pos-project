@@ -41,9 +41,14 @@ npm --prefix client run dev
 # otherwise the window loads the Vite dev server.
 npm start
 
-# Tests
-npm --prefix server test
+# Checks (same as CI): lint + all tests + client build
+npm run check
+# or individually
+npm run lint
+npm test
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, server and client tests, and the client build on Windows and Linux with Node 22 and 26 for every push to `main` and every pull request.
 
 The database (`server/pos_project.db`) and uploads (`server/uploads/items/`) are created on first run and are git-ignored.
 On start, pending database migrations run automatically; if the database already has data, a copy is saved to `backups/` next to it first.

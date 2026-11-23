@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { CategoryMasterView } from './CategoryMasterView';
-import { Plus, Edit2, X, Utensils, Image as ImageIcon, Upload, CheckSquare, Square, CheckCircle2, Tag, IndianRupee, Layers, Check } from 'lucide-react';
+import { Plus, Edit2, X, Utensils, Image as ImageIcon, Upload, CheckSquare, Square, CheckCircle2, IndianRupee, Layers, Check } from 'lucide-react';
 
 export function ItemManagerView() {
   const { authFetch, user } = useAuth();

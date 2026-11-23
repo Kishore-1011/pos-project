@@ -20,7 +20,7 @@ function itemColumns(a = 'i') {
   return [
     `${a}.id`, `${a}.category_id`, `${a}.name`,
     rupees(`${a}.price_paise`, 'price'),
-    `${a}.image_url`, `${a}.is_active`, `${a}.created_at`, `${a}.updated_at`
+    `${a}.image_url`, `${a}.is_active`, `${a}.allow_price_change`, `${a}.created_at`, `${a}.updated_at`
   ].join(', ');
 }
 
@@ -29,7 +29,10 @@ function orderItemColumns(a = 'oi') {
     `${a}.id`, `${a}.order_id`, `${a}.item_id`, `${a}.item_name`,
     rupees(`${a}.unit_price_paise`, 'unit_price'),
     `${a}.quantity`,
-    rupees(`${a}.subtotal_paise`, 'subtotal')
+    rupees(`${a}.subtotal_paise`, 'subtotal'),
+    rupees(`COALESCE(${a}.catalog_unit_price_paise, ${a}.unit_price_paise)`, 'catalog_unit_price'),
+    `(COALESCE(${a}.catalog_unit_price_paise, ${a}.unit_price_paise) != ${a}.unit_price_paise) AS price_changed`,
+    `${a}.price_change_reason`
   ].join(', ');
 }
 

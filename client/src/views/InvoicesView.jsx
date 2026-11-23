@@ -4,11 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { ThermalReceipt } from '../components/ThermalReceipt';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
-import { 
-  FileText, Search, Calendar, Filter, Printer, Eye, 
-  Download, ChevronLeft, ChevronRight, X, CheckCircle2, 
-  CreditCard, Banknote, Users, RefreshCw, ShoppingBag, 
-  IndianRupee, Tag, Clock, ArrowRight, RotateCcw
+import {
+  FileText, Search, Calendar, Printer, Eye, Download, ChevronLeft, ChevronRight, X, CreditCard, Users, RefreshCw, Tag
 } from 'lucide-react';
 
 // Business date in the shop's time zone (respects the business-day cutoff setting)

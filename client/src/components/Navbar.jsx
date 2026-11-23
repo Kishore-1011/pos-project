@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PRODUCT_NAME } from '../config/brand';
-import { ShieldAlert, UserCheck, Clock, Search, Sparkles } from 'lucide-react';
+import { ShieldAlert, UserCheck, Search } from 'lucide-react';
 
 export function Navbar({ searchQuery, setSearchQuery, searchInputRef }) {
   const { user } = useAuth();

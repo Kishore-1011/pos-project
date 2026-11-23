@@ -1,14 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getShopTimeZone } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
-import { 
-  Users, Search, Plus, Phone, Calendar, ShoppingBag, 
-  IndianRupee, ArrowUpDown, ChevronRight, X, Edit2, 
-  Trash2, UserCheck, Sparkles, Receipt, Clock, CheckCircle2,
-  TrendingUp, Award, RefreshCw, AlertCircle, Download,
-  ChevronLeft
+import {
+  Users, Search, Plus, Phone, Calendar, ShoppingBag, IndianRupee, ArrowUpDown, ChevronRight, X, Edit2, UserCheck, CheckCircle2, Award, RefreshCw, AlertCircle, Download, ChevronLeft
 } from 'lucide-react';
 
 export function CustomersView() {

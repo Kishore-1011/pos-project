@@ -32,6 +32,15 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
 
+  const logout = () => {
+    sessionStorage.removeItem(TOKEN_KEY);
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch (e) {}
+    setToken('');
+    setUser(null);
+  };
+
   useEffect(() => {
     if (token) {
       // Validate token with backend
@@ -75,15 +84,6 @@ export function AuthProvider({ children }) {
     setToken(data.token);
     setUser(data.user);
     return data.user;
-  };
-
-  const logout = () => {
-    sessionStorage.removeItem(TOKEN_KEY);
-    try {
-      localStorage.removeItem(TOKEN_KEY);
-    } catch (e) {}
-    setToken('');
-    setUser(null);
   };
 
   const authFetch = async (url, options = {}) => {

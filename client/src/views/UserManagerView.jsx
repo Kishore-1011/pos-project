@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { UserPlus, Shield, UserCheck, UserX, X, Users, AlertTriangle, KeyRound, Lock, CheckCircle2, Edit2, UserCog } from 'lucide-react';
+import { UserPlus, UserCheck, UserX, X, Users, KeyRound, Lock, CheckCircle2, Edit2, UserCog } from 'lucide-react';
 
 export function UserManagerView() {
   const { authFetch, user: currentUser } = useAuth();

@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { 
-  FolderPlus, Edit2, Trash2, CheckCircle2, X, AlertTriangle, 
-  Tag, Layers, RefreshCw, Power, Plus, ShieldAlert, Check,
-  AlertCircle
+import {
+  Edit2, Trash2, CheckCircle2, X, AlertTriangle, Tag, Layers, RefreshCw, Power, Plus, ShieldAlert, Check, AlertCircle
 } from 'lucide-react';
 
 export function CategoryMasterView({ onCategoryUpdated }) {

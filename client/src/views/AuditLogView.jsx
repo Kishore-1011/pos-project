@@ -77,6 +77,7 @@ export function AuditLogView() {
             <option value="ORDER_CREATE">ORDER_CREATE</option>
             <option value="PRICE_UPDATE">PRICE_UPDATE</option>
             <option value="ITEM_PRICE_BULK">ITEM_PRICE_BULK</option>
+            <option value="BILL_PRICE_CHANGE">BILL_PRICE_CHANGE</option>
             <option value="ITEM_CATEGORY_BULK">ITEM_CATEGORY_BULK</option>
             <option value="ITEM_TOGGLE_BULK">ITEM_TOGGLE_BULK</option>
             <option value="VOID_ORDER">VOID_ORDER</option>

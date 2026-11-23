@@ -3,11 +3,8 @@ import { getShopTimeZone, businessDateString } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
-import { 
-  BarChart3, Calendar, IndianRupee, TrendingUp, AlertOctagon, 
-  CheckCircle, Users, ShoppingBag, UserCheck, ArrowRight, 
-  Printer, RefreshCw, Layers, Sparkles, Percent, DollarSign,
-  ChevronLeft, ChevronRight, Download, FileSpreadsheet
+import {
+  BarChart3, Calendar, UserCheck, RefreshCw, ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 
 // Business date in the shop's time zone (respects the business-day cutoff setting)

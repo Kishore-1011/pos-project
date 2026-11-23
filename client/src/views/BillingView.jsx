@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ThermalReceipt } from '../components/ThermalReceipt';
+import * as billingMath from '../utils/billing';
 import { formatInvoiceFallback } from '../config/brand';
-import { 
-  Search, Plus, Minus, Trash2, Printer, CheckCircle2, 
-  DollarSign, QrCode, Sparkles, X, Utensils, 
-  Coffee, CupSoda, Cake, AlertCircle, ArrowRight, Save, RotateCcw,
-  Package, Image as ImageIcon, CreditCard, Banknote, Tag, Percent,
-  Users, Phone, UserCheck, UserPlus, Check, ChevronDown, Smartphone
+import {
+  Plus, Minus, Trash2, Printer, CheckCircle2, Sparkles, X, Utensils, Coffee, CupSoda, Cake, AlertCircle, Save, RotateCcw, Package, CreditCard, Banknote, Users, Phone, UserCheck, Check, Smartphone
 } from 'lucide-react';
 
 export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
@@ -326,41 +323,26 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
     resetOrderState();
   };
 
-  // Calculations in whole paise to avoid floating-point drift (mirrors server/src/utils/money.js)
-  const subtotal = useMemo(() => {
-    const paise = cart.reduce((sum, item) => {
-      const price = Number(item.price) || 0;
-      const quantity = Number(item.quantity) || 1;
-      return sum + Math.round(price * 100) * quantity;
-    }, 0);
-    return paise / 100;
-  }, [cart]);
+  // Billing maths lives in utils/billing.js (paise-exact, unit-tested)
+  const subtotal = useMemo(() => billingMath.cartSubtotal(cart), [cart]);
+  const totalItemCount = useMemo(() => billingMath.cartItemCount(cart), [cart]);
+  const computedDiscount = useMemo(
+    () => billingMath.discountAmount(subtotal, discountType, discountValue),
+    [subtotal, discountValue, discountType]
+  );
+  const grandTotal = billingMath.grandTotal(subtotal, computedDiscount);
 
-  const totalItemCount = useMemo(() => {
-    return cart.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-  }, [cart]);
-
-  const computedDiscount = useMemo(() => {
-    const val = parseFloat(discountValue) || 0;
-    const raw = discountType === 'PERCENT'
-      ? (subtotal * Math.min(100, Math.max(0, val))) / 100
-      : Math.max(0, val);
-    return Math.round(Math.min(subtotal, raw) * 100) / 100;
-  }, [subtotal, discountValue, discountType]);
-
-  const grandTotal = Math.max(0, Math.round((subtotal - computedDiscount) * 100) / 100);
-
-  // Auto-fill cashReceived with Grand Total when grandTotal changes or CASH mode selected
+  // Auto-fill cashReceived when grandTotal changes or CASH mode selected (rounded UP so it covers the bill)
   useEffect(() => {
     if (paymentMode === 'CASH' && !cashReceived) {
-      setCashReceived(String(grandTotal.toFixed(0)));
+      setCashReceived(String(billingMath.suggestedCash(grandTotal)));
     }
   }, [grandTotal, paymentMode]);
 
   // Cash Tender Math & Validation Rules
   const cashReceivedVal = parseFloat(cashReceived) || 0;
-  const changeToReturn = paymentMode === 'CASH' ? Math.round((cashReceivedVal - grandTotal) * 100) / 100 : 0;
-  const isCashSufficient = paymentMode === 'CASH' ? (cashReceivedVal >= grandTotal && grandTotal >= 0) : true;
+  const changeToReturn = paymentMode === 'CASH' ? billingMath.cashChange(cashReceivedVal, grandTotal) : 0;
+  const isCashSufficient = paymentMode === 'CASH' ? billingMath.isCashEnough(cashReceivedVal, grandTotal) : true;
   const canSaveOrder = cart.length > 0 && !savedOrder && !isSubmittingOrder && (isDigitalPayment || isCashSufficient);
 
   // Quick denomination adders
@@ -374,7 +356,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
 
   const setExactTender = () => {
     if (isDigitalPayment || savedOrder) return;
-    setCashReceived(String(grandTotal.toFixed(0)));
+    setCashReceived(String(billingMath.suggestedCash(grandTotal)));
   };
 
   // ACTION 1: Save / Paid (Non-Destructive: Saves to DB, shows toast, enables print, preserves cart items)
@@ -984,7 +966,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                     disabled={isDigitalPayment || !!savedOrder}
                     value={isDigitalPayment ? '' : cashReceived}
                     onChange={(e) => setCashReceived(e.target.value)}
-                    placeholder={isDigitalPayment ? 'Auto' : `₹${grandTotal.toFixed(0)}`}
+                    placeholder={isDigitalPayment ? 'Auto' : `₹${billingMath.suggestedCash(grandTotal)}`}
                     className="h-10 w-28 sm:w-32 bg-white border-2 border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 rounded-xl px-3 py-1.5 text-right text-sm font-black text-slate-900 tabular-nums outline-none disabled:opacity-50 transition-all"
                   />
                 </div>
@@ -996,9 +978,9 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                     disabled={isDigitalPayment || !!savedOrder}
                     onClick={setExactTender}
                     className="py-2 px-1 rounded-xl bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-900 text-xs font-bold border border-slate-200 tabular-nums text-center shadow-2xs active:scale-95 transition-all truncate"
-                    title={`Exact ₹${grandTotal.toFixed(0)}`}
+                    title={`Exact ₹${billingMath.suggestedCash(grandTotal)}`}
                   >
-                    ₹{grandTotal.toFixed(0)}
+                    ₹{billingMath.suggestedCash(grandTotal)}
                   </button>
                   <button
                     type="button"
