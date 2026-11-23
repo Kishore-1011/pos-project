@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* Design tokens (UI-1). The product keeps its blue look; "brand" is the single accent colour, so a
+   future brand colour is a one-place change. Components use brand-*, ink-* (text) and line (borders). */
+@theme inline {
+  --color-brand-50: var(--color-blue-50);
+  --color-brand-100: var(--color-blue-100);
+  --color-brand-200: var(--color-blue-200);
+  --color-brand-500: var(--color-blue-500);
+  --color-brand-600: var(--color-blue-600);
+  --color-brand-700: var(--color-blue-700);
+  --color-brand-800: var(--color-blue-800);
+
+  --color-ink: var(--color-slate-900);        /* primary text */
+  --color-ink-muted: var(--color-slate-600);  /* secondary text: AA contrast on white */
+  --color-ink-subtle: var(--color-slate-500); /* hints, captions (large/secondary use only) */
+  --color-line: var(--color-slate-200);       /* borders and dividers */
+  --color-surface: var(--color-white);
+  --color-canvas: var(--color-slate-50);      /* page background */
+}
+
 @layer base {
   :root {
     --bg-main: #f8fafc;

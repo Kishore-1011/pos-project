@@ -11,6 +11,7 @@ import { EODReportView } from './views/EODReportView';
 import { CustomersView } from './views/CustomersView';
 import { InvoicesView } from './views/InvoicesView';
 import { PRODUCT_NAME } from './config/brand';
+import { FeedbackProvider } from './components/ui';
 
 function MainApp() {
   const { user, loading, can } = useAuth();
@@ -74,8 +75,10 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainApp />
-    </AuthProvider>
+    <FeedbackProvider>
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
+    </FeedbackProvider>
   );
 }

@@ -156,6 +156,14 @@ Phase 2 adds about 8 new settings screens, so the shared building blocks come fi
 
 **Done when:** no browser pop-ups remain, all new Phase 2 screens use only shared components, the shell adapts to the user's permissions, and a full bill can be done at 1366×768 without scrolling.
 
+**Progress**
+- [x] Building blocks (2026-11-23): design tokens in `index.css` (`brand-*` = the existing blue, `ink`, `line`, `canvas`); `components/ui/`: Button (7 variants incl. quiet destructive), TextInput / Select / Textarea / MoneyInput with labels, hints and errors wired for screen readers, Modal (Esc, focus trap, focus return), FeedbackProvider with `useToast()` and `useDialogs()` (`confirm` / `prompt` replacing browser pop-ups), Badge, Card, PageHeader, EmptyState. `utils/format.js`: `formatMoney` (₹1,23,456.00) and `formatDate` / `formatTime` / `formatDateTime` in the shop time zone, with tests. Fonts no longer loaded from Google (offline app; already bundled).
+- [x] Billing fits 1366×768 (C1) and no customer pop-up (C3): right column rebuilt on the shared components: title + item count, optional inline customer lookup (phone → suggestions → attach; "Register new customer" reuses the existing dialog), compact one-line cart rows (the only scrolling part), always-visible pay panel (subtotal, discount, total, Cash/UPI/Card, cash received with change on one row, quick amounts, Save bill / Print / New bill). Billing's 2 alerts replaced with toasts. Verified in headless Edge (see UI_REVIEW status).
+- [ ] App shell: labelled sidebar, search only on Billing, top bar with shop name, user, switch user (PIN), business date
+- [ ] Replace the remaining 37 browser pop-ups in other screens
+- [ ] Shared formatters across all screens (dates, money); invoice column width; readable audit log; wording by business type; denser item grid
+- [ ] Settings layout (for Phase 2)
+
 ### UI-2: Billing screen redesign (with Phase 4)
 - Search-first layout: item search or barcode field always focused; results by name, code or barcode.
 - Keyboard flow at the counter: F2 search, + / − quantity, F4 discount, F8 hold, F9 pay, F10 print, Esc cancel; shortcuts shown on screen.
