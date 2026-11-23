@@ -1,4 +1,5 @@
 import React from 'react';
+import { getShopTimeZone } from '../utils/datetime';
 import { PRODUCT_NAME, formatInvoiceFallback } from '../config/brand';
 
 export function ThermalReceipt({ order, items, rollSize = '58mm' }) {
@@ -36,10 +37,10 @@ export function ThermalReceipt({ order, items, rollSize = '58mm' }) {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
-        timeZone: 'Asia/Kolkata'
+        timeZone: getShopTimeZone()
       });
     } catch (e) {
-      return new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+      return new Date().toLocaleString('en-IN', { timeZone: getShopTimeZone() });
     }
   };
 

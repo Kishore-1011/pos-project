@@ -1,56 +1,129 @@
-const { all, get, run } = require('../db/database');
+const { allSync, getSync, runSync } = require('../db/database');
 
-// Known settings with defaults and validation. Phase 2 (Shop Settings) extends this list.
+class SettingError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function isValidTimeZone(tz) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Known settings: default, parse (validate + normalize, throws SettingError) and optional guard
+// (checks whether a change is allowed given current data). Phase 2 (Shop Settings) extends this list.
 const SETTINGS = {
   // Max discount a CASHIER may give on one bill, as % of subtotal. Admins are not limited.
   cashier_max_discount_pct: {
     default: 20,
     parse: (v) => {
       const n = Number(v);
-      if (!Number.isFinite(n) || n < 0 || n > 100) {
-        throw new Error('cashier_max_discount_pct must be a number between 0 and 100');
+      if (v === null || v === '' || !Number.isFinite(n) || n < 0 || n > 100) {
+        throw new SettingError('cashier_max_discount_pct must be a number between 0 and 100');
       }
       return n;
+    }
+  },
+
+  // Shop's time zone (IANA name). Decides the local date of every bill for reports and numbering.
+  time_zone: {
+    default: 'Asia/Kolkata',
+    parse: (v) => {
+      const tz = typeof v === 'string' ? v.trim() : '';
+      if (!tz || !isValidTimeZone(tz)) throw new SettingError(`"${v}" is not a known time zone (e.g. Asia/Kolkata)`);
+      return tz;
+    }
+  },
+
+  // Month the financial year starts (1-12). India: April.
+  fy_start_month: {
+    default: 4,
+    parse: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 12) throw new SettingError('fy_start_month must be a month number from 1 to 12');
+      return n;
+    },
+    // Changing it after billing has started would restart invoice numbering mid-year.
+    guard: (next, current) => {
+      if (next === current) return;
+      const billed = getSync('SELECT 1 FROM orders LIMIT 1');
+      if (billed) {
+        throw new SettingError('The financial year start can only be changed before the first bill is made', 409);
+      }
+    }
+  },
+
+  // Bills made after midnight but before this time count in the previous day's reports (late-night shops).
+  business_day_cutoff: {
+    default: '00:00',
+    parse: (v) => {
+      const s = typeof v === 'string' ? v.trim() : '';
+      const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(s);
+      if (!m || Number(m[1]) * 60 + Number(m[2]) > 6 * 60) {
+        throw new SettingError('business_day_cutoff must be a time from 00:00 to 06:00 (HH:MM)');
+      }
+      return s;
     }
   }
 };
 
-async function getSetting(key) {
+function readStored(key) {
+  const row = getSync('SELECT value FROM settings WHERE key = ?', [key]);
+  return row ? row.value : undefined;
+}
+
+function parseStored(key, raw) {
   const def = SETTINGS[key];
-  if (!def) throw new Error(`Unknown setting: ${key}`);
-  const row = await get('SELECT value FROM settings WHERE key = ?', [key]);
-  if (!row) return def.default;
+  if (raw === undefined) return def.default;
   try {
-    return def.parse(JSON.parse(row.value));
+    return def.parse(JSON.parse(raw));
   } catch (e) {
     return def.default;
   }
 }
 
-async function getAllSettings() {
-  const rows = await all('SELECT key, value FROM settings');
-  const stored = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  const result = {};
-  for (const [key, def] of Object.entries(SETTINGS)) {
-    try {
-      result[key] = key in stored ? def.parse(JSON.parse(stored[key])) : def.default;
-    } catch (e) {
-      result[key] = def.default;
-    }
-  }
-  return result;
+/** Current value of a setting (synchronous; safe inside transactions). */
+function getSettingSync(key) {
+  if (!SETTINGS[key]) throw new Error(`Unknown setting: ${key}`);
+  return parseStored(key, readStored(key));
 }
 
-/** Validates and saves the given known keys. Throws with a readable message on bad input. */
+async function getSetting(key) {
+  return getSettingSync(key);
+}
+
+function getAllSettingsSync() {
+  const stored = Object.fromEntries(allSync('SELECT key, value FROM settings').map((r) => [r.key, r.value]));
+  return Object.fromEntries(Object.keys(SETTINGS).map((key) => [key, parseStored(key, stored[key])]));
+}
+
+async function getAllSettings() {
+  return getAllSettingsSync();
+}
+
 async function updateSettings(patch) {
+  return updateSettingsSync(patch);
+}
+
+/** Validates (all keys first, nothing saved on error) and saves the given known keys. Use inside transaction(). */
+function updateSettingsSync(patch) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new SettingError('Expected an object of settings');
+  const current = getAllSettingsSync();
   const changes = {};
-  for (const [key, value] of Object.entries(patch || {})) {
+  for (const [key, value] of Object.entries(patch)) {
     const def = SETTINGS[key];
-    if (!def) throw new Error(`Unknown setting: ${key}`);
+    if (!def) throw new SettingError(`Unknown setting: ${key}`);
     changes[key] = def.parse(value);
+    if (def.guard) def.guard(changes[key], current[key]);
   }
   for (const [key, value] of Object.entries(changes)) {
-    await run(
+    runSync(
       `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
       [key, JSON.stringify(value)]
@@ -59,4 +132,12 @@ async function updateSettings(patch) {
   return changes;
 }
 
-module.exports = { getSetting, getAllSettings, updateSettings };
+module.exports = {
+  SettingError,
+  getSetting,
+  getSettingSync,
+  getAllSettings,
+  getAllSettingsSync,
+  updateSettings,
+  updateSettingsSync
+};

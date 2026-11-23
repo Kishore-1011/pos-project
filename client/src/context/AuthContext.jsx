@@ -1,8 +1,19 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { STORAGE_PREFIX } from '../config/brand';
+import { setShopCalendar } from '../utils/datetime';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = `${STORAGE_PREFIX}_token`;
+
+// Shop time zone and business-day cutoff, needed before screens format any date.
+async function loadShopCalendar(token) {
+  try {
+    const res = await fetch('/api/settings', { headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) setShopCalendar(await res.json());
+  } catch (e) {
+    // Keep defaults; screens still work
+  }
+}
 
 // The UI is always served from the same origin as the API (the embedded server in the
 // desktop app, or the Vite dev server which proxies /api and /uploads), so URLs are relative.
@@ -33,7 +44,8 @@ export function AuthProvider({ children }) {
           if (res.ok) return res.json();
           throw new Error('Session invalid or revoked');
         })
-        .then(data => {
+        .then(async data => {
+          await loadShopCalendar(token);
           setUser(data.user);
         })
         .catch(err => {
@@ -58,6 +70,7 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || 'Login failed');
     }
 
+    await loadShopCalendar(data.token);
     sessionStorage.setItem(TOKEN_KEY, data.token);
     setToken(data.token);
     setUser(data.user);

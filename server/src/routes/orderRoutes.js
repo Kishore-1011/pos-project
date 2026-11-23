@@ -1,6 +1,7 @@
 const express = require('express');
 const { all, get, runSync, transaction } = require('../db/database');
 const numberSeries = require('../services/numberSeriesService');
+const calendar = require('../services/calendar');
 const { orderColumns, orderItemColumns } = require('../db/columns');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit, logAuditSync } = require('../services/auditService');
@@ -252,15 +253,22 @@ router.get('/', async (req, res) => {
       baseConditions.push('(u.full_name = ? OR u.username = ?)');
       params.push(staff_name, staff_name);
     }
-    if (start && end) {
-      baseConditions.push(`date(o.created_at, '+5 hours', '+30 minutes') BETWEEN date(?) AND date(?)`);
-      params.push(start, end);
-    } else if (start) {
-      baseConditions.push(`date(o.created_at, '+5 hours', '+30 minutes') >= date(?)`);
-      params.push(start);
-    } else if (end) {
-      baseConditions.push(`date(o.created_at, '+5 hours', '+30 minutes') <= date(?)`);
-      params.push(end);
+    // Business-date filters (shop time zone + business-day cutoff) become exact UTC bounds
+    if (start || end) {
+      let range;
+      try {
+        range = calendar.businessRangeUtc(start, end);
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
+      if (range.from) {
+        baseConditions.push('o.created_at >= ?');
+        params.push(range.from);
+      }
+      if (range.to) {
+        baseConditions.push('o.created_at < ?');
+        params.push(range.to);
+      }
     }
 
     if (search && search.trim()) {

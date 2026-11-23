@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getShopTimeZone } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
 import { ClipboardList, Eye, X, Filter } from 'lucide-react';
 
@@ -128,7 +129,7 @@ export function AuditLogView() {
                             hour: '2-digit',
                             minute: '2-digit',
                             hour12: true,
-                            timeZone: 'Asia/Kolkata'
+                            timeZone: getShopTimeZone()
                           });
                         } catch (e) {
                           return String(log.timestamp);

@@ -1,41 +1,45 @@
 const express = require('express');
+const { transaction } = require('../db/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
-const { getAllSettings, updateSettings } = require('../services/settingsService');
-const { logAudit } = require('../services/auditService');
+const { getAllSettingsSync, updateSettingsSync, SettingError } = require('../services/settingsService');
+const { logAuditSync } = require('../services/auditService');
+const calendar = require('../services/calendar');
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
-// GET /api/settings - all staff (billing screen needs e.g. the cashier discount cap)
-router.get('/', async (req, res) => {
-  try {
-    return res.json(await getAllSettings());
-  } catch (err) {
-    console.error('Fetch Settings Error:', err);
-    return res.status(500).json({ error: 'Failed to fetch settings' });
-  }
+// Settings plus the derived calendar facts screens need (today's business date, current FY).
+function snapshot() {
+  return { ...getAllSettingsSync(), calendar: calendar.describe() };
+}
+
+// GET /api/settings - all staff (billing needs the discount cap; every screen needs the time zone)
+router.get('/', (req, res) => {
+  res.json(snapshot());
 });
 
-// PUT /api/settings - Admin only, partial update of known keys
-router.put('/', requireRole('ADMIN'), async (req, res) => {
-  let changes;
+// PUT /api/settings - Admin only, partial update of known keys (audited)
+router.put('/', requireRole('ADMIN'), (req, res) => {
   try {
-    const before = await getAllSettings();
-    changes = await updateSettings(req.body);
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: 'SETTINGS_UPDATE',
-      entityType: 'settings',
-      entityId: 0,
-      oldValue: Object.fromEntries(Object.keys(changes).map((k) => [k, before[k]])),
-      newValue: changes
+    transaction(() => {
+      const before = getAllSettingsSync();
+      const changes = updateSettingsSync(req.body);
+      logAuditSync({
+        userId: req.user.id,
+        userName: req.user.username,
+        action: 'SETTINGS_UPDATE',
+        entityType: 'settings',
+        entityId: 0,
+        oldValue: Object.fromEntries(Object.keys(changes).map((k) => [k, before[k]])),
+        newValue: changes
+      });
     });
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    if (err instanceof SettingError) return res.status(err.status).json({ error: err.message });
+    throw err;
   }
-  return res.json(await getAllSettings());
+  return res.json(snapshot());
 });
 
 module.exports = router;

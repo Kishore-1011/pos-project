@@ -55,7 +55,7 @@ function writeLegacyDatabase(file) {
       VALUES ('AIRAS-0001', 'AIRAS-0001', 1, 1, 75.3, 5, 70.3, 'CASH', 'PAID', 100, 29.700000000000003, '2026-11-20T06:00:00.000Z')`).run();
   db.prepare(`INSERT INTO orders (order_number, user_id, subtotal, discount, final_amount, payment_method, payment_status,
       cash_received, change_given, created_at)
-      VALUES ('AIRAS-0002', 1, 30.299999999999997, 0, 30.299999999999997, 'UPI', 'PAID', 30.3, 0, '2026-11-20T07:00:00.000Z')`).run();
+      VALUES ('AIRAS-0002', 1, 30.299999999999997, 0, 30.299999999999997, 'UPI', 'PAID', 30.3, 0, '2026-11-20 07:00:00')`).run();
   db.prepare(`INSERT INTO order_items (order_id, item_id, item_name, unit_price, quantity, subtotal)
       VALUES (1, 1, 'Tea', 10.1, 3, 30.299999999999997), (1, 2, 'Samosa', 15, 3, 45), (2, 1, 'Tea', 10.1, 3, 30.299999999999997)`).run();
   // The old engine never enforced links, so real shops can hold orphans: a bill line whose item was deleted.
@@ -86,6 +86,8 @@ test('legacy database is upgraded: all migrations recorded, integrity ok', () =>
   assert.ok(cols.includes('final_amount_paise') && !cols.includes('final_amount'));
   assert.equal(db.pragma('foreign_keys', { simple: true }), 1, 'links are enforced again after upgrading');
   assert.equal(db.prepare('SELECT COUNT(*) n FROM order_items WHERE item_id = 99').get().n, 1, 'orphan line kept, not lost');
+  assert.equal(db.prepare('SELECT created_at FROM orders WHERE id = 2').get().created_at, '2026-11-20T07:00:00.000Z',
+    'old space-separated time converted to ISO UTC');
 });
 
 test('a backup copy is written before upgrading a database that has data', () => {

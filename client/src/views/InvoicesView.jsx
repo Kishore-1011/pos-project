@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getShopTimeZone, businessDateString } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
 import { ThermalReceipt } from '../components/ThermalReceipt';
 import { exportToCSV } from '../utils/csvExport';
@@ -10,16 +11,8 @@ import {
   IndianRupee, Tag, Clock, ArrowRight, RotateCcw
 } from 'lucide-react';
 
-const getLocalDateString = (d = new Date()) => {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
-  } catch (e) {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-};
+// Business date in the shop's time zone (respects the business-day cutoff setting)
+const getLocalDateString = (d = new Date()) => businessDateString(d);
 
 export function InvoicesView() {
   const { authFetch } = useAuth();
@@ -234,8 +227,8 @@ export function InvoicesView() {
 
       const rows = exportData.map(o => {
         const d = new Date(o.created_at || Date.now());
-        const dateStr = d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
-        const timeStr = d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+        const dateStr = d.toLocaleDateString('en-IN', { timeZone: getShopTimeZone(), day: '2-digit', month: '2-digit', year: 'numeric' });
+        const timeStr = d.toLocaleTimeString('en-IN', { timeZone: getShopTimeZone(), hour: '2-digit', minute: '2-digit', hour12: true });
 
         return {
           invoice_no: o.invoice_no || o.order_number || formatInvoiceFallback(o.id),
@@ -273,7 +266,7 @@ export function InvoicesView() {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
-        timeZone: 'Asia/Kolkata'
+        timeZone: getShopTimeZone()
       });
     } catch {
       return dateStr;

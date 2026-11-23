@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { getShopTimeZone } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
@@ -205,7 +206,7 @@ export function CustomersView() {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
-        timeZone: 'Asia/Kolkata'
+        timeZone: getShopTimeZone()
       });
     } catch {
       return dateStr;
