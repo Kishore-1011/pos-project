@@ -40,6 +40,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
   const [paymentMode, setPaymentMode] = useState('CASH');
   const isDigitalPayment = paymentMode !== 'CASH';
   const [cashReceived, setCashReceived] = useState('');
+  const [cashEdited, setCashEdited] = useState(false); // true once the cashier types/adjusts the amount
   const [notes, setNotes] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
@@ -304,6 +305,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
     setSelectedExistingCustomer(null);
     setDiscountValue(0);
     setCashReceived('');
+    setCashEdited(false);
     setNotes('');
     setSavedOrder(null);
     setShowReceiptModal(false);
@@ -332,12 +334,14 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
   );
   const grandTotal = billingMath.grandTotal(subtotal, computedDiscount);
 
-  // Auto-fill cashReceived when grandTotal changes or CASH mode selected (rounded UP so it covers the bill)
+  // Cash received follows the bill total (rounded UP so it always covers it) until the cashier types an
+  // amount or uses a quick-cash button. Previously it filled once ("0" on an empty cart, or the first
+  // item's price) and then stopped, so every cash bill showed "Short by" until corrected by hand.
   useEffect(() => {
-    if (paymentMode === 'CASH' && !cashReceived) {
-      setCashReceived(String(billingMath.suggestedCash(grandTotal)));
+    if (paymentMode === 'CASH' && !cashEdited) {
+      setCashReceived(grandTotal > 0 ? String(billingMath.suggestedCash(grandTotal)) : '');
     }
-  }, [grandTotal, paymentMode]);
+  }, [grandTotal, paymentMode, cashEdited]);
 
   // Cash Tender Math & Validation Rules
   const cashReceivedVal = parseFloat(cashReceived) || 0;
@@ -348,6 +352,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
   // Quick denomination adders
   const addTenderAmount = (extra) => {
     if (isDigitalPayment || savedOrder) return;
+    setCashEdited(true);
     setCashReceived((prev) => {
       const current = parseFloat(prev) || 0;
       return String((current + extra).toFixed(0));
@@ -965,7 +970,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                     min="0"
                     disabled={isDigitalPayment || !!savedOrder}
                     value={isDigitalPayment ? '' : cashReceived}
-                    onChange={(e) => setCashReceived(e.target.value)}
+                    onChange={(e) => { setCashEdited(true); setCashReceived(e.target.value); }}
                     placeholder={isDigitalPayment ? 'Auto' : `₹${billingMath.suggestedCash(grandTotal)}`}
                     className="h-10 w-28 sm:w-32 bg-white border-2 border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 rounded-xl px-3 py-1.5 text-right text-sm font-black text-slate-900 tabular-nums outline-none disabled:opacity-50 transition-all"
                   />

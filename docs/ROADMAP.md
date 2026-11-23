@@ -7,7 +7,7 @@ Bug details are in [PRODUCT_ANALYSIS.md](PRODUCT_ANALYSIS.md).
 | Phase | Theme | Estimate | Status |
 |---|---|---|---|
 | 0 | Safety & correct billing | ~1 wk | Done (2026-11-23) |
-| 1 | Foundation: DB, series, FY/time zone, roles & permissions | ~3 wk | Done (2026-11-23), CI first run pending |
+| 1 | Foundation: DB, series, FY/time zone, roles & permissions | ~3 wk | Done (2026-11-23), CI green |
 | 2 | Setup wizard & Settings screens | ~1.5 wk | |
 | 3 | Catalog for food, retail & services | ~2 wk | |
 | 4 | Billing upgrades | ~2 wk | |
@@ -86,7 +86,7 @@ Data model and server logic only; the screens for these come in Phase 2.
   - Not done here, on purpose: splitting the 800–1,400-line views. UI-1 rebuilds those screens on the shared components, so splitting them now would be done twice; it moves to UI-1.
   - Shared API helper: already in place (`authFetch` in AuthContext; all URLs relative since Phase 0).
 
-**Phase 1 status:** all 9 steps done; 92 tests (88 server, 4 client). Remaining "done when" checks: CI green on GitHub (first run happens on the next push), and one check of the new database engine inside the Electron window (deferred to installer time).
+**Phase 1 status:** all 9 steps done; 92 tests (88 server, 4 client). CI green on GitHub (Windows + Linux, Node 22 + 26). One remaining check: the new database engine inside the Electron window (deferred to installer time).
 
 ## Phase 2: Setup wizard & Settings screens
 - First-run wizard: Business → Address → Tax & licences → Business type → Number series (defaults pre-filled) → Owner account. No default `admin123`.
@@ -141,7 +141,7 @@ Data model and server logic only; the screens for these come in Phase 2.
 
 **Starting point (from the code, 2026-11-23):** 39 browser `alert()`/`prompt()`/`confirm()` pop-ups; dark-mode styles in 5 of 12 screens but no way to switch it on; almost no keyboard handling or accessibility markup (2 occurrences in the client); every screen hand-styles its own buttons, inputs and tables; the five main views are 470–1,400 lines each. Target screens: 1366×768 laptops and 1024×768 POS terminals, mouse or touch, often operated by keyboard at the counter.
 
-The plan below is drawn from the code. It gets refined after a visual walkthrough of every screen (screenshots plus a design-critique pass) at the start of UI-1.
+Visual walkthrough done 2026-11-23: see [UI_REVIEW.md](UI_REVIEW.md) (17 screens at 1366×768 and 1920×1080). Agreed direction: keep the current blue look and refine it; design for laptop/desktop with mouse and keyboard.
 
 ### UI-1: Design system & app shell (with Phase 2)
 Phase 2 adds about 8 new settings screens, so the shared building blocks come first and the new screens are built with them.
@@ -151,9 +151,10 @@ Phase 2 adds about 8 new settings screens, so the shared building blocks come fi
 - Replace all 39 `alert`/`prompt`/`confirm` calls with toasts, inline errors and confirm dialogs (void reason gets a proper form).
 - App shell: sidebar with labels and icons, built from the user's permissions; top bar showing shop name, logged-in user, switch-user (PIN) and the current business day.
 - Settings layout used by all Phase 2 screens: left section list, form on the right, sticky Save/Cancel, unsaved-change warning.
-- Indian number formatting everywhere (₹1,23,456.00 with lakh grouping) through one formatter.
+- Indian number formatting everywhere (₹1,23,456.00 with lakh grouping) and one date format, through shared formatters.
+- From the UI review: Billing fits 1366×768 (pay panel pinned, only cart lines scroll); no customer pop-up on the first item (inline optional customer field); denser item grid; labelled sidebar with search only on Billing; invoice-number column fixed; readable audit log; wording follows the business type; contrast and destructive-action styling.
 
-**Done when:** no browser pop-ups remain, all new Phase 2 screens use only shared components, and the shell adapts to the user's permissions.
+**Done when:** no browser pop-ups remain, all new Phase 2 screens use only shared components, the shell adapts to the user's permissions, and a full bill can be done at 1366×768 without scrolling.
 
 ### UI-2: Billing screen redesign (with Phase 4)
 - Search-first layout: item search or barcode field always focused; results by name, code or barcode.
