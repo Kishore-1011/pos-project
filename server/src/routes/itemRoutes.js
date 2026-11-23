@@ -1,54 +1,17 @@
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
 const { all, get, run } = require('../db/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../services/auditService');
-const { getUploadsDirectory } = require('../config/paths');
+const { createImageUpload } = require('../services/imageUpload');
 const { toPaise, fromPaise } = require('../utils/money');
 const { itemColumns } = require('../db/columns');
 
 const ITEM_BY_ID_SQL = `SELECT ${itemColumns('i')} FROM items i WHERE i.id = ?`;
-const crypto = require('crypto');
 
 const router = express.Router();
 
-// Multer Storage Configuration for Local Item Images
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = getUploadsDirectory();
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    // Extension comes from the validated MIME type, never from the client's filename
-    const ext = ALLOWED_IMAGE_TYPES[file.mimetype];
-    const uniqueName = `item-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
-    cb(null, uniqueName);
-  }
-});
-
-// Raster images only. SVG/HTML are rejected because uploads are served from the API origin.
-const ALLOWED_IMAGE_TYPES = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-  'image/gif': '.gif'
-};
-
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    if (ALLOWED_IMAGE_TYPES[file.mimetype]) return cb(null, true);
-    const err = new Error('Only JPEG, PNG, WebP or GIF images are allowed');
-    err.status = 400;
-    return cb(err);
-  }
-});
+// Item photos: stored in <uploads>/items, served at /uploads/items/<file>
+const upload = createImageUpload({ folder: 'items', prefix: 'item' });
 
 const MAX_PRICE = 10000000; // ₹1 crore sanity cap
 

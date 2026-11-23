@@ -77,7 +77,9 @@ test('legacy database is upgraded: all migrations recorded, integrity ok', () =>
   const { getDb } = require('../src/db/database');
   const db = getDb();
   const versions = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version);
-  assert.deepEqual(versions, [1, 2, 3]);
+  const { loadMigrations } = require('../src/db/migrate');
+  assert.deepEqual(versions, loadMigrations().map((m) => m.version));
+  assert.ok(versions.length >= 3);
   assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
   assert.equal(db.pragma('journal_mode', { simple: true }), 'wal');
   const cols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);

@@ -16,7 +16,16 @@ Bug details are in [PRODUCT_ANALYSIS.md](PRODUCT_ANALYSIS.md).
 | 7 | Release-ready product | ~1.5 wk | |
 | Later | v2 features, web / cloud | | |
 
-Phases 0–2 (about 5.5 weeks) give a safe, configurable base that can be installed at a pilot shop.
+UI work runs as a parallel track tied to these phases. See [UI enhancement track](#ui-enhancement-track) below.
+
+| UI step | Theme | Estimate | Runs with |
+|---|---|---|---|
+| UI-1 | Design system & app shell | ~1 wk | Before/with Phase 2 |
+| UI-2 | Billing screen redesign | ~1 wk | Phase 4 |
+| UI-3 | Lists, reports & dashboard | ~1 wk | Phase 6 |
+| UI-4 | Accessibility, languages & polish | ~0.5 wk | Phase 7 |
+
+Phases 0–2 plus UI-1 (about 6.5 weeks) give a safe, configurable base that can be installed at a pilot shop.
 
 ---
 
@@ -63,7 +72,7 @@ Data model and server logic only; the screens for these come in Phase 2.
 
 **Progress**
 - [x] 1–2 Engine switch, migrations, paise columns (2026-11-23). `better-sqlite3` 13.2 (WAL, `synchronous=FULL`, foreign keys enforced). Migrations `001_baseline`, `002_money_paise`, `003_indexes` run on start, with an automatic backup to `backups/` first; links are checked after upgrading and orphan rows are reported, not dropped. An order, its lines and its audit entry save in one transaction. Money stored as integer paise; API still returns rupees (`server/src/db/columns.js`). Tests: 28 passing, including a legacy-DB upgrade, a simulated crash mid-bill, and 10,000+ orders (bill save ~3.5 ms, order list ~10 ms, month report ~110 ms). A real Phase-0 dev DB upgraded cleanly. Not yet run inside the Electron window (Electron download pending).
-- [ ] 3–4 Organization, tax & licences
+- [x] 3–4 Organization, tax & licences (2026-11-23). Migration `004_organization`: single-row `organization` table and a `licences` table. `GET /api/organization` (all staff) returns the profile, licences, compliance warnings and option lists (37 GST state codes, business types, registration types, licence types). Admin-only, audited: `PUT /api/organization` (partial update), `PUT /api/organization/licences` (replace list), `POST|DELETE /api/organization/logo` (images only, 2 MB, old file removed). Validation: GSTIN format, state code and check digit; GSTIN required for Regular/Composition and not allowed when Unregistered; GSTIN must match the selected state and PAN (both filled in from the GSTIN when blank); PIN, phone, email; FSSAI 14 digits. Warnings: name missing, food business without FSSAI, licence expired or expiring within 30 days. Image upload rules moved to a shared `services/imageUpload.js`. Tests: 41 passing (13 new).
 - [ ] 5 Number series engine
 - [ ] 6 Time zone, FY, business day
 - [ ] 7 Users, roles & permissions
@@ -118,6 +127,44 @@ Data model and server logic only; the screens for these come in Phase 2.
 - Licence/activation key (if sold).
 - Optional demo data (food menu / retail catalog / services), user guide, onboarding tips.
 - Needs the final product name.
+
+## UI enhancement track
+
+**Starting point (from the code, 2026-11-23):** 39 browser `alert()`/`prompt()`/`confirm()` pop-ups; dark-mode styles in 5 of 12 screens but no way to switch it on; almost no keyboard handling or accessibility markup (2 occurrences in the client); every screen hand-styles its own buttons, inputs and tables; the five main views are 470–1,400 lines each. Target screens: 1366×768 laptops and 1024×768 POS terminals, mouse or touch, often operated by keyboard at the counter.
+
+The plan below is drawn from the code. It gets refined after a visual walkthrough of every screen (screenshots plus a design-critique pass) at the start of UI-1.
+
+### UI-1: Design system & app shell (with Phase 2)
+Phase 2 adds about 8 new settings screens, so the shared building blocks come first and the new screens are built with them.
+- Design tokens: colours, spacing, type scale, radius, shadows in one Tailwind theme; light theme first, dark theme as a real switch (or removed until it's complete).
+- Shared components: Button, Input/Select/Textarea with labels and error text, Money input (₹, paise-safe), Modal, Confirm dialog, Toast, Table (sort, empty and loading states), Badge, Tabs, Drawer, Page header.
+- Replace all 39 `alert`/`prompt`/`confirm` calls with toasts, inline errors and confirm dialogs (void reason gets a proper form).
+- App shell: sidebar with labels and icons, built from the user's permissions; top bar showing shop name, logged-in user, switch-user (PIN) and the current business day.
+- Settings layout used by all Phase 2 screens: left section list, form on the right, sticky Save/Cancel, unsaved-change warning.
+- Indian number formatting everywhere (₹1,23,456.00 with lakh grouping) through one formatter.
+
+**Done when:** no browser pop-ups remain, all new Phase 2 screens use only shared components, and the shell adapts to the user's permissions.
+
+### UI-2: Billing screen redesign (with Phase 4)
+- Search-first layout: item search or barcode field always focused; results by name, code or barcode.
+- Keyboard flow at the counter: F2 search, + / − quantity, F4 discount, F8 hold, F9 pay, F10 print, Esc cancel; shortcuts shown on screen.
+- Cart: edit quantity inline; line price change (when allowed) with a visible "price changed" marker; clear line totals and GST breakup.
+- Pay panel: cash, UPI, card and split payment; quick-cash buttons; UPI QR on screen; large change-due figure.
+- Held bills strip; food extras: order type and table number.
+- Touch mode: larger targets (at least 44 px) and a category tile grid for touch terminals.
+
+**Done when:** a regular bill can be done keyboard-only, and a counter test shows a typical 3-item cash bill in under 15 seconds.
+
+### UI-3: Lists, reports & dashboard (with Phase 6)
+- One consistent list pattern for Invoices, Customers, Items and Audit log: filters bar, saved date presets, pagination, export.
+- Owner dashboard: today's sales, payment split, top items, hourly chart, low stock, vs. last week.
+- Report pages with charts plus a printable/PDF layout; GST summary screen.
+- Shift close screen: expected vs. counted cash, with denominations.
+
+### UI-4: Accessibility, languages & polish (with Phase 7)
+- Keyboard focus order and visible focus rings; screen-reader labels; colour contrast at WCAG AA (accessibility audit pass).
+- Text pulled into language files: English first, structure ready for Hindi/Tamil and other Indian languages later.
+- Onboarding tips for first use, empty-state guidance, consistent wording (UX copy pass).
 
 ## Later (v2+)
 - Refunds / returns as credit notes (with a Credit Note series).

@@ -17,9 +17,14 @@ function getUploadsDirectory() {
   return path.join(SERVER_ROOT, 'uploads', 'items');
 }
 
+// Root of all uploads, served at /uploads (items/ and branding/ live under it).
+function getUploadsRoot() {
+  return path.dirname(getUploadsDirectory());
+}
+
 // Folder holding the DB and other per-install files (e.g. the JWT secret).
 function getDataDirectory() {
   return path.dirname(getDatabasePath());
 }
 
-module.exports = { getDatabasePath, getUploadsDirectory, getDataDirectory };
+module.exports = { getDatabasePath, getUploadsDirectory, getUploadsRoot, getDataDirectory };

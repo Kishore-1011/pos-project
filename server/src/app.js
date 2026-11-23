@@ -11,6 +11,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const organizationRoutes = require('./routes/organizationRoutes');
 const { PRODUCT_NAME } = require('./config/brand');
 const { getUploadsDirectory } = require('./config/paths');
 
@@ -80,6 +81,7 @@ function createApp({ logRequests = true } = {}) {
   app.use('/api/audit-logs', auditRoutes);
   app.use('/api/reports', reportRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/organization', organizationRoutes);
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
