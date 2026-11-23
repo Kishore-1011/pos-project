@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast, useDialogs } from '../components/ui';
 import { UserPlus, UserCheck, UserX, X, Users, KeyRound, Lock, CheckCircle2, Edit2, UserCog } from 'lucide-react';
 
 export function UserManagerView() {
   const { authFetch, user: currentUser } = useAuth();
+  const toast = useToast();
+  const dialogs = useDialogs();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,10 +75,10 @@ export function UserManagerView() {
         loadUsers();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Failed to create staff member');
+        toast.error(errData.error || 'Failed to create staff member');
       }
     } catch (err) {
-      alert('Error creating user: ' + err.message);
+      toast.error('Error creating user: ' + err.message);
     }
   };
 
@@ -108,10 +111,10 @@ export function UserManagerView() {
         loadUsers();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Failed to update user profile');
+        toast.error(errData.error || 'Failed to update user profile');
       }
     } catch (err) {
-      alert('Error updating user: ' + err.message);
+      toast.error('Error updating user: ' + err.message);
     } finally {
       setEditLoading(false);
     }
@@ -119,16 +122,21 @@ export function UserManagerView() {
 
   const handleToggleStatus = async (userItem) => {
     if (userItem.id === currentUser.id) {
-      alert('You cannot deactivate your own account!');
+      toast.error('You cannot deactivate your own account!');
       return;
     }
 
     const nextStatus = userItem.is_active === 1 ? 0 : 1;
-    const actionName = nextStatus === 0 ? 'DEACTIVATE' : 'ACTIVATE';
-
-    if (!confirm(`Are you sure you want to ${actionName} user "${userItem.username}"?`)) {
-      return;
-    }
+    const deactivating = nextStatus === 0;
+    const ok = await dialogs.confirm({
+      title: deactivating ? `Deactivate ${userItem.full_name}?` : `Reactivate ${userItem.full_name}?`,
+      message: deactivating
+        ? `@${userItem.username} will be signed out at once and can't log in until reactivated.`
+        : `@${userItem.username} will be able to log in again.`,
+      confirmLabel: deactivating ? 'Deactivate' : 'Reactivate',
+      tone: deactivating ? 'danger' : 'primary'
+    });
+    if (!ok) return;
 
     try {
       const res = await authFetch(`/api/users/${userItem.id}/status`, {
@@ -142,17 +150,17 @@ export function UserManagerView() {
         loadUsers();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Failed to update user status');
+        toast.error(errData.error || 'Failed to update user status');
       }
     } catch (err) {
-      alert('Failed to update status: ' + err.message);
+      toast.error('Failed to update status: ' + err.message);
     }
   };
 
   const handleResetPasswordSubmit = async (e) => {
     e.preventDefault();
     if (!resetModalUser || !newPassword || newPassword.length < 6) {
-      alert('Please enter a valid password (at least 6 characters)');
+      toast.error('Please enter a valid password (at least 6 characters)');
       return;
     }
 
@@ -170,10 +178,10 @@ export function UserManagerView() {
         setTimeout(() => setSuccessToast(''), 3500);
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Failed to reset password');
+        toast.error(errData.error || 'Failed to reset password');
       }
     } catch (err) {
-      alert('Reset Password Error: ' + err.message);
+      toast.error('Reset Password Error: ' + err.message);
     } finally {
       setResetLoading(false);
     }

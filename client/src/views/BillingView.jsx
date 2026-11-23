@@ -6,7 +6,7 @@ import { formatInvoiceFallback } from '../config/brand';
 import { formatMoney } from '../utils/format';
 import { Badge, Button, TextInput, MoneyInput, EmptyState, useToast } from '../components/ui';
 import {
-  Plus, Minus, Trash2, Printer, CheckCircle2, Sparkles, X, Utensils, Coffee, CupSoda, Cake, AlertCircle, Save, RotateCcw, Package, CreditCard, Banknote, Users, Phone, UserCheck, Check, Smartphone, ShoppingCart
+  Plus, Minus, Trash2, Printer, CheckCircle2, X, AlertCircle, Save, RotateCcw, CreditCard, Banknote, Users, Phone, UserCheck, Check, Smartphone, ShoppingCart, Search
 } from 'lucide-react';
 
 export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
@@ -512,16 +512,6 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
     return url.startsWith('/') ? url : `/${url}`;
   };
 
-  // Vector Category Icon Resolver
-  const getCategoryVectorIcon = (name = '') => {
-    const l = name.toLowerCase();
-    if (l.includes('roll') || l.includes('snack')) return Utensils;
-    if (l.includes('bev') || l.includes('drink')) return CupSoda;
-    if (l.includes('tea') || l.includes('coffee')) return Coffee;
-    if (l.includes('dessert') || l.includes('sweet')) return Cake;
-    return Package;
-  };
-
   return (
     <div className="w-full h-full max-w-7xl mx-auto flex flex-col min-h-0 overflow-hidden">
       
@@ -532,78 +522,56 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
           
           {/* Category Filter Pills (Pinned Top) */}
           <div className="flex-shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                Categories
-              </h2>
-              <span className="text-[11px] text-slate-500 font-semibold">{categories.length + 1} Available</span>
+            {/* Item search lives on the Billing screen (it used to sit in the top bar of every screen) */}
+            <div className="relative mb-3">
+              <Search className="w-4 h-4 text-ink-subtle absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={searchQuery || ''}
+                onChange={(e) => setSearchQuery && setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery && setSearchQuery(''); }}
+                placeholder="Search items"
+                aria-label="Search items"
+                className="w-full h-10 bg-surface border border-slate-300 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 rounded-xl pl-9 pr-10 text-sm text-ink placeholder:text-ink-subtle outline-none"
+              />
+              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono font-bold text-ink-subtle bg-slate-100 px-1.5 py-0.5 rounded border border-line" aria-hidden="true">/</kbd>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              
-              {/* All Category Pill */}
-              <button
-                onClick={() => setSelectedCategory('ALL')}
-                className={`p-3 rounded-2xl border text-left transition-all duration-200 flex items-center gap-2.5 ${
-                  selectedCategory === 'ALL'
-                    ? 'bg-blue-50 border-blue-600 text-blue-700 shadow-xs ring-1 ring-blue-600 font-bold'
-                    : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800 font-medium'
-                }`}
-              >
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
-                  selectedCategory === 'ALL' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'
-                }`}>
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-xs font-bold truncate">All Menu</h3>
-                  <p className={`text-[10px] font-medium ${selectedCategory === 'ALL' ? 'text-blue-600/80' : 'text-slate-400'}`}>
-                    {items.length} Items
-                  </p>
-                </div>
-              </button>
-
-              {/* Dynamic Categories */}
-              {categories.map((cat) => {
-                const isSelected = selectedCategory === String(cat.id);
-                const CatIcon = getCategoryVectorIcon(cat.name);
-                const itemCount = items.filter(i => i.category_id === cat.id).length;
-
+            {/* Category filter: one row of chips (used to be two rows of large cards) */}
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Filter by category">
+              {[{ id: 'ALL', name: 'All', count: items.length },
+                ...categories.map((cat) => ({ id: String(cat.id), name: cat.name, count: items.filter((i) => i.category_id === cat.id).length }))
+              ].map((cat) => {
+                const isSelected = selectedCategory === cat.id;
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => setSelectedCategory(String(cat.id))}
-                    className={`p-3 rounded-2xl border text-left transition-all duration-200 flex items-center gap-2.5 ${
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`h-8 px-3 rounded-full border text-sm font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                       isSelected
-                        ? 'bg-blue-50 border-blue-600 text-blue-700 shadow-xs ring-1 ring-blue-600 font-bold'
-                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800 font-medium'
+                        ? 'bg-brand-600 border-brand-600 text-white'
+                        : 'bg-surface border-line text-ink-muted hover:border-brand-500 hover:text-ink'
                     }`}
                   >
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
-                      isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      <CatIcon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-xs font-bold truncate">{cat.name}</h3>
-                      <p className={`text-[10px] font-medium ${isSelected ? 'text-blue-600/80' : 'text-slate-400'}`}>
-                        {itemCount} Items
-                      </p>
-                    </div>
+                    {cat.name}
+                    <span className={`text-xs tabular-nums ${isSelected ? 'text-white/80' : 'text-ink-subtle'}`}>{cat.count}</span>
                   </button>
                 );
               })}
-
             </div>
           </div>
 
           {/* Menu Catalog Grid */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2 flex-shrink-0">
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                Select Menu Items
+              <h2 className="text-sm font-bold text-ink tracking-tight">
+                Items
               </h2>
-              <span className="text-xs text-slate-500 font-semibold">{filteredItems.length} items available</span>
+              <span className="text-xs text-ink-muted font-semibold">{filteredItems.length} {filteredItems.length === 1 ? 'item' : 'items'}</span>
             </div>
 
             {loading ? (
@@ -613,89 +581,48 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                 No items match your search.
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 content-start auto-rows-max scrollbar-thin scrollbar-thumb-slate-300 hover:scrollbar-thumb-slate-400">
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 content-start auto-rows-max scrollbar-thin scrollbar-thumb-slate-300 hover:scrollbar-thumb-slate-400">
                 {filteredItems.map((item) => {
                   const inCartItem = cart.find(c => c.id === item.id);
                   const imgPath = formatImageUrl(item.image_url);
 
+                  // Compact card (UI review H1): photo strip only when the item has a photo; no repeated
+                  // name in a grey placeholder, no "READY" tag. More items fit on a laptop screen.
                   return (
                     <button
                       type="button"
                       key={item.id}
                       onClick={() => addToCart(item)}
                       disabled={!!savedOrder}
-                      className={`group rounded-2xl border overflow-hidden transition-all duration-200 flex flex-col justify-between bg-white text-left h-fit ${
-                        savedOrder ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-blue-600 hover:shadow-md'
-                      } ${
-                        inCartItem
-                          ? 'border-blue-600 shadow-md ring-2 ring-blue-600'
-                          : 'border-slate-200'
-                      }`}
+                      aria-label={`${item.name}, ${formatMoney(item.price)}${inCartItem ? `, ${inCartItem.quantity} in bill` : ''}`}
+                      className={`group relative rounded-xl border overflow-hidden transition-colors flex flex-col bg-surface text-left h-fit ${
+                        savedOrder ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-brand-500 hover:shadow-sm'
+                      } ${inCartItem ? 'border-brand-600 ring-1 ring-brand-600' : 'border-line'}`}
                     >
-                      {/* Fixed Image Container */}
-                      <div className="w-full h-28 relative overflow-hidden bg-slate-100 flex-shrink-0 flex items-center justify-center">
-                        {imgPath ? (
+                      {imgPath && (
+                        <div className="w-full h-20 bg-slate-100 overflow-hidden">
                           <img
                             src={imgPath}
-                            alt={item.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.style.display = 'none';
-                              if (e.target.nextElementSibling) {
-                                e.target.nextElementSibling.style.display = 'flex';
-                              }
-                            }}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
                           />
-                        ) : null}
-                        {/* Fallback Icon when Image is Missing or Broken */}
-                        <div
-                          className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-100 p-2 text-center"
-                          style={{ display: imgPath ? 'none' : 'flex' }}
-                        >
-                          <Utensils className="w-6 h-6 text-slate-400 mb-1" />
-                          <span className="text-[10px] font-bold text-slate-600 uppercase truncate max-w-full">
-                            {item.name}
-                          </span>
                         </div>
+                      )}
 
-                        {/* Top-Right Plus Cart Button */}
-                        <div
-                          className={`absolute top-2 right-2 w-7 h-7 rounded-xl flex items-center justify-center font-bold shadow-xs transition-transform active:scale-95 z-10 ${
-                            inCartItem
-                              ? 'bg-blue-600 text-white font-bold'
-                              : 'bg-white/90 text-slate-800 group-hover:bg-blue-600 group-hover:text-white'
-                          }`}
-                        >
-                          {inCartItem ? (
-                            <span className="text-xs font-bold tabular-nums">{inCartItem.quantity}</span>
-                          ) : (
-                            <Plus className="w-3.5 h-3.5" />
-                          )}
-                        </div>
+                      {inCartItem && (
+                        <span className="absolute top-1.5 right-1.5 min-w-6 h-6 px-1.5 rounded-full bg-brand-600 text-white text-xs font-bold tabular-nums flex items-center justify-center shadow-sm" aria-hidden="true">
+                          {inCartItem.quantity}
+                        </span>
+                      )}
+
+                      <div className="p-3 flex flex-col gap-1 w-full">
+                        <span className={`text-sm font-semibold text-ink leading-snug line-clamp-2 ${inCartItem ? 'pr-7' : ''} group-hover:text-brand-700`}>
+                          {item.name}
+                        </span>
+                        <span className="text-xs text-ink-subtle truncate">{item.category_name || 'Uncategorised'}</span>
+                        <span className="text-sm font-bold text-brand-700 tabular-nums">{formatMoney(item.price)}</span>
                       </div>
-
-                      {/* Content Section: Name, Category, Price & Badge */}
-                      <div className="p-3 flex flex-col justify-between flex-1 w-full">
-                        <div>
-                          <h4 className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-1 leading-snug group-hover:text-blue-600 transition-colors">
-                            {item.name}
-                          </h4>
-                          <p className="text-xs text-slate-400 mt-0.5 capitalize truncate">
-                            {item.category_name || 'General'}
-                          </p>
-                        </div>
-
-                        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-                          <span className="text-sm font-extrabold text-blue-600 tabular-nums">
-                            ₹{Number(item.price).toFixed(2)}
-                          </span>
-                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
-                            Ready
-                          </span>
-                        </div>
-                      </div>
-
                     </button>
                   );
                 })}

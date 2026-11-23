@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getShopTimeZone, businessDateString } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui';
 import { ThermalReceipt } from '../components/ThermalReceipt';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
@@ -13,6 +14,7 @@ const getLocalDateString = (d = new Date()) => businessDateString(d);
 
 export function InvoicesView() {
   const { authFetch } = useAuth();
+  const toast = useToast();
 
   const todayStr = getLocalDateString();
   const [startDate, setStartDate] = useState(todayStr);
@@ -204,7 +206,7 @@ export function InvoicesView() {
       }
 
       if (exportData.length === 0) {
-        alert('No invoice records match current filters.');
+        toast.info('No invoice records match current filters.');
         return;
       }
 
@@ -245,7 +247,7 @@ export function InvoicesView() {
       exportToCSV(`${FILE_PREFIX}_Invoices_${startDate}_to_${endDate}`, headers, rows);
     } catch (err) {
       console.error('Export Invoices CSV error:', err);
-      alert('Failed to export CSV: ' + err.message);
+      toast.error('Failed to export CSV: ' + err.message);
     } finally {
       setIsExportingCSV(false);
     }

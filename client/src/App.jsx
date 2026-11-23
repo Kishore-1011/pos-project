@@ -59,13 +59,7 @@ function MainApp() {
   };
 
   return (
-    <MainLayout
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      searchQuery={searchQuery}
-      setSearchQuery={setSearchQuery}
-      searchInputRef={searchInputRef}
-    >
+    <MainLayout activeTab={activeTab} setActiveTab={setActiveTab}>
       <ErrorBoundary>
         {renderContent()}
       </ErrorBoundary>

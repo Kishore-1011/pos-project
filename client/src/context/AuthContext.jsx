@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { STORAGE_PREFIX } from '../config/brand';
 import { setShopCalendar } from '../utils/datetime';
+import { useToast } from '../components/ui';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = `${STORAGE_PREFIX}_token`;
@@ -23,6 +24,7 @@ const resolveApiUrl = (url) => {
 };
 
 export function AuthProvider({ children }) {
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => {
     try {
@@ -67,16 +69,17 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  const login = async (username, password) => {
-    const res = await fetch(resolveApiUrl('/api/auth/login'), {
+  // Password login and PIN login (quick user switching) share the same session start
+  const startSession = async (endpoint, body, fallbackError) => {
+    const res = await fetch(resolveApiUrl(endpoint), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify(body)
     });
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.error || 'Login failed');
+      throw new Error(data.error || fallbackError);
     }
 
     await loadShopCalendar(data.token);
@@ -85,6 +88,9 @@ export function AuthProvider({ children }) {
     setUser(data.user);
     return data.user;
   };
+
+  const login = (username, password) => startSession('/api/auth/login', { username, password }, 'Login failed');
+  const pinLogin = (username, pin) => startSession('/api/auth/pin-login', { username, pin }, 'Wrong PIN');
 
   const authFetch = async (url, options = {}) => {
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -100,7 +106,7 @@ export function AuthProvider({ children }) {
     if (res.status === 403 || res.status === 401) {
       const data = await res.clone().json().catch(() => ({}));
       if (data.error && data.error.includes('deactivated')) {
-        alert('⚠️ Your account has been deactivated by the shop owner. Access revoked.');
+        toast.error('Your account has been deactivated by the shop owner.', { title: 'Signed out' });
         logout();
       }
     }
@@ -113,7 +119,7 @@ export function AuthProvider({ children }) {
   const can = (permission) => Boolean(user && Array.isArray(user.permissions) && user.permissions.includes(permission));
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, authFetch, can }}>
+    <AuthContext.Provider value={{ user, token, loading, login, pinLogin, logout, authFetch, can }}>
       {children}
     </AuthContext.Provider>
   );

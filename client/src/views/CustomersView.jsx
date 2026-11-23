@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getShopTimeZone } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
+import { useToast, useDialogs } from '../components/ui';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
 import {
@@ -9,6 +10,8 @@ import {
 
 export function CustomersView() {
   const { authFetch } = useAuth();
+  const toast = useToast();
+  const dialogs = useDialogs();
 
   const [customers, setCustomers] = useState([]);
   const [stats, setStats] = useState({
@@ -151,9 +154,13 @@ export function CustomersView() {
   };
 
   const handleDeleteCustomer = async (cust) => {
-    if (!window.confirm(`Are you sure you want to remove customer profile "${cust.name}" (${cust.customer_code})?`)) {
-      return;
-    }
+    const ok = await dialogs.confirm({
+      title: `Delete ${cust.name}?`,
+      message: `${cust.customer_code} will be removed. Their past bills are kept but no longer linked to them.`,
+      confirmLabel: 'Delete customer',
+      tone: 'danger'
+    });
+    if (!ok) return;
 
     try {
       const res = await authFetch(`/api/customers/${cust.id}`, {
@@ -164,10 +171,10 @@ export function CustomersView() {
         loadCustomers();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to delete customer');
+        toast.error(data.error || 'Failed to delete customer');
       }
     } catch (err) {
-      alert('Error deleting customer: ' + err.message);
+      toast.error('Error deleting customer: ' + err.message);
     }
   };
 
@@ -242,7 +249,7 @@ export function CustomersView() {
           <button
             onClick={() => {
               if (customers.length === 0) {
-                alert('No customer records to export.');
+                toast.info('No customer records to export.');
                 return;
               }
 

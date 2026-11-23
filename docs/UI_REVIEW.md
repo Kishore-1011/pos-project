@@ -7,7 +7,7 @@ Direction agreed: **keep the current blue look and refine it**; target **laptop/
 
 The look is clean and consistent: one blue accent, rounded cards, good use of white space, clear totals. The problems are about **fitting a laptop screen, extra clicks at the counter, and consistency**, not the visual style. Two of them stop a cashier on every bill.
 
-**Status (2026-11-23):** C1, C2 and C3 fixed. After-screenshots in [screens-after/](screens-after/): Save is at 699–739 px in the 768 px window with an empty cart, 3 lines or 14 lines; no pop-up on the first item; inline customer lookup; bill saves; no browser pop-ups or page errors.
+**Status (2026-11-23):** C1, C2, C3, H1, H3, H4 and M3 fixed; all browser pop-ups replaced with in-app toasts and dialogs. Remaining: H2, H5, H6, H7, M1, M2, M4–M8. After-screenshots in [screens-after/](screens-after/): Save is at 699–739 px in the 768 px window with an empty cart, 3 lines or 14 lines; no pop-up on the first item; inline customer lookup; bill saves; no browser pop-ups or page errors.
 
 ## Critical: blocks normal billing on a 1366×768 laptop
 

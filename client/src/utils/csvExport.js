@@ -3,10 +3,10 @@
  * Exports tabular data as a downloadable .csv file with Excel-compatible UTF-8 BOM.
  */
 
+/** Downloads the rows as CSV. Returns false (and downloads nothing) when there are no rows. */
 export function exportToCSV(filename, headers, rows) {
   if (!rows || rows.length === 0) {
-    alert('No data available to export.');
-    return;
+    return false;
   }
 
   // Format headers
@@ -36,11 +36,18 @@ export function exportToCSV(filename, headers, rows) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+  return true;
 }
 
-function escapeCSVField(field) {
+// Text starting with = + - @ (or a tab/CR) is run as a formula when the CSV is opened in Excel, so a
+// customer named "=HYPERLINK(...)" could inject one. Prefix such values with ' so they stay text.
+// Plain negative numbers ("-20.30") are left alone.
+const FORMULA_START = /^[=+@\t\r]|^-(?!\d+(\.\d+)?$)/;
+
+export function escapeCSVField(field) {
   if (field === null || field === undefined) return '""';
-  const str = String(field);
+  let str = String(field);
+  if (FORMULA_START.test(str)) str = `'${str}`;
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

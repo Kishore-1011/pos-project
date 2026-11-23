@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getShopTimeZone, businessDateString } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
+import { useToast, useDialogs } from '../components/ui';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
 import {
@@ -12,6 +13,8 @@ const getLocalDateString = (d = new Date()) => businessDateString(d);
 
 export function EODReportView() {
   const { authFetch } = useAuth();
+  const toast = useToast();
+  const dialogs = useDialogs();
 
   const todayStr = getLocalDateString();
   const [startDate, setStartDate] = useState(todayStr);
@@ -103,7 +106,7 @@ export function EODReportView() {
       }
 
       if (allOrders.length === 0) {
-        alert('No orders found for the selected date range.');
+        toast.info('No orders found for the selected date range.');
         return;
       }
 
@@ -144,35 +147,40 @@ export function EODReportView() {
       exportToCSV(`${FILE_PREFIX}_Sales_${startDate}_to_${endDate}`, headers, rows);
     } catch (err) {
       console.error('Export CSV Error:', err);
-      alert('Failed to export CSV: ' + err.message);
+      toast.error('Failed to export CSV: ' + err.message);
     } finally {
       setIsExportingCSV(false);
     }
   };
 
   const handleVoidOrder = async (orderId) => {
-    const reason = prompt('Enter reason for voiding this bill:');
+    const reason = await dialogs.prompt({
+      title: 'Void this bill?',
+      message: 'The bill stays in your records, marked as void, and is left out of sales totals.',
+      label: 'Reason',
+      placeholder: 'e.g. Customer cancelled the order',
+      required: true,
+      minLength: 3,
+      confirmLabel: 'Void bill',
+      tone: 'danger'
+    });
     if (reason === null) return;
-    if (!reason.trim()) {
-      alert('A reason is required to void a bill.');
-      return;
-    }
 
     try {
       const res = await authFetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'VOID', reason: reason.trim() })
+        body: JSON.stringify({ status: 'VOID', reason })
       });
 
       if (res.ok) {
-        alert('Order has been marked VOID.');
+        toast.success('Bill voided.');
         fetchReport();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Failed to void order');
+        toast.error(errData.error || 'Failed to void order');
       }
     } catch (err) {
-      alert('Error voiding order: ' + err.message);
+      toast.error('Error voiding order: ' + err.message);
     }
   };
 

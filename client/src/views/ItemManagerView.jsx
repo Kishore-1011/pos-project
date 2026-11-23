@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui';
 import { CategoryMasterView } from './CategoryMasterView';
 import { Plus, Edit2, X, Utensils, Image as ImageIcon, Upload, CheckSquare, Square, CheckCircle2, IndianRupee, Layers, Check } from 'lucide-react';
 
 export function ItemManagerView() {
   const { authFetch, user } = useAuth();
+  const toast = useToast();
   const [activeSubTab, setActiveSubTab] = useState('items'); // 'items' | 'categories'
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -95,10 +97,10 @@ export function ItemManagerView() {
         loadData();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Operation failed');
+        toast.error(errData.error || 'Operation failed');
       }
     } catch (err) {
-      alert('Error saving item: ' + err.message);
+      toast.error('Error saving item: ' + err.message);
     }
   };
 
@@ -166,10 +168,10 @@ export function ItemManagerView() {
         loadData();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Bulk update failed');
+        toast.error(errData.error || 'Bulk update failed');
       }
     } catch (err) {
-      alert('Bulk status error: ' + err.message);
+      toast.error('Bulk status error: ' + err.message);
     } finally {
       setBulkSubmitting(false);
     }
@@ -199,10 +201,10 @@ export function ItemManagerView() {
         loadData();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Bulk category update failed');
+        toast.error(errData.error || 'Bulk category update failed');
       }
     } catch (err) {
-      alert('Bulk category error: ' + err.message);
+      toast.error('Bulk category error: ' + err.message);
     } finally {
       setBulkSubmitting(false);
     }
@@ -214,7 +216,7 @@ export function ItemManagerView() {
 
     const val = parseFloat(bulkPriceValue);
     if (isNaN(val) || (bulkPriceMode === 'FIXED' && val < 0)) {
-      alert('Please enter a valid price amount');
+      toast.error('Please enter a valid price amount');
       return;
     }
 
@@ -245,10 +247,10 @@ export function ItemManagerView() {
         loadData();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Bulk price update failed');
+        toast.error(errData.error || 'Bulk price update failed');
       }
     } catch (err) {
-      alert('Bulk price error: ' + err.message);
+      toast.error('Bulk price error: ' + err.message);
     } finally {
       setBulkSubmitting(false);
     }

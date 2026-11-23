@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui';
 import {
   Edit2, Trash2, CheckCircle2, X, AlertTriangle, Tag, Layers, RefreshCw, Power, Plus, ShieldAlert, Check, AlertCircle
 } from 'lucide-react';
 
 export function CategoryMasterView({ onCategoryUpdated }) {
   const { authFetch, can } = useAuth();
+  const toast = useToast();
   const isAdmin = can('items.manage');
 
   const [categories, setCategories] = useState([]);
@@ -135,10 +137,10 @@ export function CategoryMasterView({ onCategoryUpdated }) {
         if (onCategoryUpdated) onCategoryUpdated();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to update category status');
+        toast.error(data.error || 'Failed to update category status');
       }
     } catch (err) {
-      alert('Error updating status: ' + err.message);
+      toast.error('Error updating status: ' + err.message);
     }
   };
 

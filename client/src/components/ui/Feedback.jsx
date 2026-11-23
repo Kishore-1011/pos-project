@@ -79,8 +79,9 @@ export function FeedbackProvider({ children }) {
       <DialogContext.Provider value={dialogs}>
         {children}
 
-        {/* Toasts: bottom-right, newest last; errors are announced immediately */}
-        <div className="fixed bottom-4 right-4 z-[110] flex flex-col gap-2 w-[22rem] max-w-[calc(100vw-2rem)]">
+        {/* Toasts: top-right under the top bar (bottom-right covered Billing's Save/Print buttons);
+            newest last; errors are announced immediately */}
+        <div className="fixed top-[4.5rem] right-4 z-[110] flex flex-col gap-2 w-[22rem] max-w-[calc(100vw-2rem)]">
           {toasts.map((t) => {
             const s = TOAST_STYLE[t.tone] || TOAST_STYLE.info;
             const Icon = s.icon;
