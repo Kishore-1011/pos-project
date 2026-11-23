@@ -6,6 +6,8 @@ const { all, get, run } = require('../db/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../services/auditService');
 const { getUploadsDirectory } = require('../config/paths');
+const { toPaise, fromPaise } = require('../utils/money');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -19,16 +21,40 @@ const storage = multer.diskStorage({
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    const uniqueName = `item-${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+    // Extension comes from the validated MIME type, never from the client's filename
+    const ext = ALLOWED_IMAGE_TYPES[file.mimetype];
+    const uniqueName = `item-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
     cb(null, uniqueName);
   }
 });
 
+// Raster images only. SVG/HTML are rejected because uploads are served from the API origin.
+const ALLOWED_IMAGE_TYPES = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif'
+};
+
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_IMAGE_TYPES[file.mimetype]) return cb(null, true);
+    const err = new Error('Only JPEG, PNG, WebP or GIF images are allowed');
+    err.status = 400;
+    return cb(err);
+  }
 });
+
+const MAX_PRICE = 10000000; // ₹1 crore sanity cap
+
+/** Parses a price input into rupees rounded to paise, or returns null if invalid. */
+function parsePrice(value) {
+  const paise = toPaise(value);
+  if (Number.isNaN(paise) || paise < 0 || paise > MAX_PRICE * 100) return null;
+  return fromPaise(paise);
+}
 
 router.use(authenticateToken);
 
@@ -63,8 +89,9 @@ router.get('/', async (req, res) => {
 router.post('/', requireRole('ADMIN'), upload.single('image'), async (req, res) => {
   try {
     const { name, price, category_id, image_url } = req.body;
+    const cleanPrice = parsePrice(price);
 
-    if (!name || price === undefined || price < 0) {
+    if (typeof name !== 'string' || !name.trim() || price === undefined || price === '' || cleanPrice === null) {
       return res.status(400).json({ error: 'Valid item name and non-negative price are required' });
     }
 
@@ -75,7 +102,7 @@ router.post('/', requireRole('ADMIN'), upload.single('image'), async (req, res) 
 
     const result = await run(
       `INSERT INTO items (name, price, category_id, image_url, is_active) VALUES (?, ?, ?, ?, 1)`,
-      [name.trim(), parseFloat(price), category_id ? parseInt(category_id, 10) : null, finalImgUrl]
+      [name.trim(), cleanPrice, category_id ? parseInt(category_id, 10) : null, finalImgUrl]
     );
 
     const newItem = await get("SELECT * FROM items WHERE id = ?", [result.lastInsertRowid]);
@@ -107,8 +134,11 @@ router.put('/:id', requireRole('ADMIN'), upload.single('image'), async (req, res
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    const newPrice = price !== undefined ? parseFloat(price) : oldItem.price;
-    const newName = name ? name.trim() : oldItem.name;
+    const newPrice = price !== undefined && price !== '' ? parsePrice(price) : oldItem.price;
+    if (newPrice === null) {
+      return res.status(400).json({ error: 'Price must be a non-negative amount' });
+    }
+    const newName = typeof name === 'string' && name.trim() ? name.trim() : oldItem.name;
     const newCatId = category_id !== undefined ? (category_id ? parseInt(category_id, 10) : null) : oldItem.category_id;
     
     let newImgUrl = oldItem.image_url;

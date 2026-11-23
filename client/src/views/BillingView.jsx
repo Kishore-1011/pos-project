@@ -7,7 +7,7 @@ import {
   DollarSign, QrCode, Sparkles, X, Utensils, 
   Coffee, CupSoda, Cake, AlertCircle, ArrowRight, Save, RotateCcw,
   Package, Image as ImageIcon, CreditCard, Banknote, Tag, Percent,
-  Users, Phone, UserCheck, UserPlus, Check, ChevronDown
+  Users, Phone, UserCheck, UserPlus, Check, ChevronDown, Smartphone
 } from 'lucide-react';
 
 export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
@@ -39,8 +39,9 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
 
   const [loading, setLoading] = useState(true);
 
-  // Payment State: Strictly 'CASH' or 'UPI_CARD'
-  const [paymentMode, setPaymentMode] = useState('CASH'); // 'CASH' | 'UPI_CARD'
+  // Payment State: 'CASH' | 'UPI' | 'CARD'
+  const [paymentMode, setPaymentMode] = useState('CASH');
+  const isDigitalPayment = paymentMode !== 'CASH';
   const [cashReceived, setCashReceived] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
@@ -325,13 +326,14 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
     resetOrderState();
   };
 
-  // Calculations (100% defensive against NaN/undefined)
+  // Calculations in whole paise to avoid floating-point drift (mirrors server/src/utils/money.js)
   const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => {
+    const paise = cart.reduce((sum, item) => {
       const price = Number(item.price) || 0;
       const quantity = Number(item.quantity) || 1;
-      return sum + price * quantity;
+      return sum + Math.round(price * 100) * quantity;
     }, 0);
+    return paise / 100;
   }, [cart]);
 
   const totalItemCount = useMemo(() => {
@@ -340,13 +342,13 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
 
   const computedDiscount = useMemo(() => {
     const val = parseFloat(discountValue) || 0;
-    if (discountType === 'PERCENT') {
-      return Math.min(subtotal, (subtotal * Math.min(100, Math.max(0, val))) / 100);
-    }
-    return Math.min(subtotal, Math.max(0, val));
+    const raw = discountType === 'PERCENT'
+      ? (subtotal * Math.min(100, Math.max(0, val))) / 100
+      : Math.max(0, val);
+    return Math.round(Math.min(subtotal, raw) * 100) / 100;
   }, [subtotal, discountValue, discountType]);
 
-  const grandTotal = Math.max(0, subtotal - computedDiscount);
+  const grandTotal = Math.max(0, Math.round((subtotal - computedDiscount) * 100) / 100);
 
   // Auto-fill cashReceived with Grand Total when grandTotal changes or CASH mode selected
   useEffect(() => {
@@ -357,13 +359,13 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
 
   // Cash Tender Math & Validation Rules
   const cashReceivedVal = parseFloat(cashReceived) || 0;
-  const changeToReturn = paymentMode === 'CASH' ? cashReceivedVal - grandTotal : 0;
+  const changeToReturn = paymentMode === 'CASH' ? Math.round((cashReceivedVal - grandTotal) * 100) / 100 : 0;
   const isCashSufficient = paymentMode === 'CASH' ? (cashReceivedVal >= grandTotal && grandTotal >= 0) : true;
-  const canSaveOrder = cart.length > 0 && !savedOrder && !isSubmittingOrder && (paymentMode === 'UPI_CARD' || isCashSufficient);
+  const canSaveOrder = cart.length > 0 && !savedOrder && !isSubmittingOrder && (isDigitalPayment || isCashSufficient);
 
   // Quick denomination adders
   const addTenderAmount = (extra) => {
-    if (paymentMode === 'UPI_CARD' || savedOrder) return;
+    if (isDigitalPayment || savedOrder) return;
     setCashReceived((prev) => {
       const current = parseFloat(prev) || 0;
       return String((current + extra).toFixed(0));
@@ -371,7 +373,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
   };
 
   const setExactTender = () => {
-    if (paymentMode === 'UPI_CARD' || savedOrder) return;
+    if (isDigitalPayment || savedOrder) return;
     setCashReceived(String(grandTotal.toFixed(0)));
   };
 
@@ -403,7 +405,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
 
     try {
       setIsSubmittingOrder(true);
-      const actualPaymentMethod = paymentMode === 'UPI_CARD' ? 'UPI' : 'CASH';
+      const actualPaymentMethod = paymentMode;
 
       const payload = {
         items: cartSnapshot.map(c => ({ item_id: c.item_id, quantity: c.quantity })),
@@ -490,9 +492,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
   const formatImageUrl = (url) => {
     if (!url) return null;
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
-    if (url.startsWith('/uploads')) return `http://localhost:5000${url}`;
-    if (url.startsWith('uploads')) return `http://localhost:5000/${url}`;
-    return `http://localhost:5000${url.startsWith('/') ? url : `/${url}`}`;
+    return url.startsWith('/') ? url : `/${url}`;
   };
 
   // Vector Category Icon Resolver
@@ -926,10 +926,10 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                 </span>
               </div>
 
-              {/* Payment Method Selector: ONLY 'CASH' and 'UPI / CARD' */}
+              {/* Payment Method Selector: CASH / UPI / CARD */}
               <div className="pt-0.5">
                 <h4 className="text-xs font-bold text-slate-800 tracking-tight mb-1.5">Payment Method</h4>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-3 gap-2">
                   
                   {/* Mode 1: Cash Tile */}
                   <button
@@ -946,27 +946,33 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                     <span className="text-xs font-bold">CASH</span>
                   </button>
 
-                  {/* Mode 2: UPI / Card Tile */}
-                  <button
-                    type="button"
-                    disabled={!!savedOrder}
-                    onClick={() => setPaymentMode('UPI_CARD')}
-                    className={`py-2.5 px-3 rounded-2xl border flex items-center justify-center gap-2 transition-all text-center ${
-                      paymentMode === 'UPI_CARD'
-                        ? 'bg-blue-50 border-blue-600 text-blue-700 ring-1 ring-blue-600 font-bold shadow-xs'
-                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600 font-medium'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4 text-blue-600" />
-                    <span className="text-xs font-bold">UPI / CARD</span>
-                  </button>
+                  {/* Modes 2 & 3: UPI and Card Tiles */}
+                  {[
+                    { mode: 'UPI', label: 'UPI', Icon: Smartphone },
+                    { mode: 'CARD', label: 'CARD', Icon: CreditCard }
+                  ].map(({ mode, label, Icon }) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={!!savedOrder}
+                      onClick={() => setPaymentMode(mode)}
+                      className={`py-2.5 px-3 rounded-2xl border flex items-center justify-center gap-2 transition-all text-center ${
+                        paymentMode === mode
+                          ? 'bg-blue-50 border-blue-600 text-blue-700 ring-1 ring-blue-600 font-bold shadow-xs'
+                          : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600 font-medium'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-bold">{label}</span>
+                    </button>
+                  ))}
 
                 </div>
               </div>
 
               {/* Tendered Amount Block (Permanently Mounted for Zero Layout Shift) */}
               <div className={`p-3 rounded-2xl border transition-all duration-200 space-y-2.5 ${
-                paymentMode === 'UPI_CARD'
+                isDigitalPayment
                   ? 'bg-slate-50/80 border-slate-200 opacity-40 pointer-events-none cursor-not-allowed select-none'
                   : 'bg-slate-50 border-slate-200'
               }`}>
@@ -975,10 +981,10 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                   <input
                     type="number"
                     min="0"
-                    disabled={paymentMode === 'UPI_CARD' || !!savedOrder}
-                    value={paymentMode === 'UPI_CARD' ? '' : cashReceived}
+                    disabled={isDigitalPayment || !!savedOrder}
+                    value={isDigitalPayment ? '' : cashReceived}
                     onChange={(e) => setCashReceived(e.target.value)}
-                    placeholder={paymentMode === 'UPI_CARD' ? 'Auto' : `₹${grandTotal.toFixed(0)}`}
+                    placeholder={isDigitalPayment ? 'Auto' : `₹${grandTotal.toFixed(0)}`}
                     className="h-10 w-28 sm:w-32 bg-white border-2 border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 rounded-xl px-3 py-1.5 text-right text-sm font-black text-slate-900 tabular-nums outline-none disabled:opacity-50 transition-all"
                   />
                 </div>
@@ -987,7 +993,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                 <div className="grid grid-cols-4 gap-1.5">
                   <button
                     type="button"
-                    disabled={paymentMode === 'UPI_CARD' || !!savedOrder}
+                    disabled={isDigitalPayment || !!savedOrder}
                     onClick={setExactTender}
                     className="py-2 px-1 rounded-xl bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-900 text-xs font-bold border border-slate-200 tabular-nums text-center shadow-2xs active:scale-95 transition-all truncate"
                     title={`Exact ₹${grandTotal.toFixed(0)}`}
@@ -996,7 +1002,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                   </button>
                   <button
                     type="button"
-                    disabled={paymentMode === 'UPI_CARD' || !!savedOrder}
+                    disabled={isDigitalPayment || !!savedOrder}
                     onClick={() => addTenderAmount(50)}
                     className="py-2 px-1 rounded-xl bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-800 text-xs font-bold border border-slate-200 text-center shadow-2xs active:scale-95 transition-all"
                   >
@@ -1004,7 +1010,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                   </button>
                   <button
                     type="button"
-                    disabled={paymentMode === 'UPI_CARD' || !!savedOrder}
+                    disabled={isDigitalPayment || !!savedOrder}
                     onClick={() => addTenderAmount(100)}
                     className="py-2 px-1 rounded-xl bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-800 text-xs font-bold border border-slate-200 text-center shadow-2xs active:scale-95 transition-all"
                   >
@@ -1012,7 +1018,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                   </button>
                   <button
                     type="button"
-                    disabled={paymentMode === 'UPI_CARD' || !!savedOrder}
+                    disabled={isDigitalPayment || !!savedOrder}
                     onClick={() => addTenderAmount(500)}
                     className="py-2 px-1 rounded-xl bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-800 text-xs font-bold border border-slate-200 text-center shadow-2xs active:scale-95 transition-all"
                   >
@@ -1022,7 +1028,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
 
                 {/* UI Feedback: Return Change vs Shortfall vs Auto-Paid */}
                 <div className="pt-1 border-t border-slate-200">
-                  {paymentMode === 'UPI_CARD' ? (
+                  {isDigitalPayment ? (
                     <div className="flex justify-between items-center text-xs p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 font-semibold">
                       <span>Status:</span>
                       <span className="font-bold text-slate-700">Digital / Auto Paid</span>

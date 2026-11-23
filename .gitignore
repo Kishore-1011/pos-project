@@ -9,6 +9,7 @@ dist/
 .env
 
 # Local runtime data (created on first run; never commit)
+.jwt_secret
 *.db
 *.sqlite
 server/uploads/items/*

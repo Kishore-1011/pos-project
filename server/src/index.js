@@ -1,73 +1,53 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const { seedDatabase } = require('./db/seed');
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const itemRoutes = require('./routes/itemRoutes');
-const categoryRoutes = require('./routes/categoryRoutes');
-const customerRoutes = require('./routes/customerRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const auditRoutes = require('./routes/auditRoutes');
-const reportRoutes = require('./routes/reportRoutes');
+const { createApp } = require('./app');
 const { PRODUCT_NAME } = require('./config/brand');
-const { getUploadsDirectory } = require('./config/paths');
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+// Loopback only by default. Set HOST explicitly (e.g. for a future LAN mode) to change it.
+const HOST = process.env.HOST || '127.0.0.1';
+const PORT = process.env.PORT !== undefined ? Number(process.env.PORT) : 5000;
+// Desktop app sets this so a busy port 5000 falls back to any free port instead of crashing.
+const ALLOW_PORT_FALLBACK = process.env.POS_PORT_FALLBACK === 'true';
 
-// Ensure local uploads directory exists (<root>/uploads/items)
-const uploadsDir = getUploadsDirectory();
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+function listen(app, port) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, HOST);
+    server.once('listening', () => resolve(server));
+    server.once('error', reject);
+  });
 }
 
-app.use(cors());
-app.use(express.json());
-
-// Item images are stored as /uploads/items/<file>, so serve the parent of the items folder
-app.use('/uploads', express.static(path.dirname(uploadsDir)));
-
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
-
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/items', itemRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/customers', customerRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/audit-logs', auditRoutes);
-app.use('/api/reports', reportRoutes);
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: `${PRODUCT_NAME} server operational`, timestamp: new Date().toISOString() });
-});
-
-// Initialize database & seed before listening
+// Initialize database & seed, then listen. Resolves with { server, port, url }.
 async function startServer() {
+  console.log('[Server] Seeding & verifying database...');
+  await seedDatabase();
+  const app = createApp();
+
+  let server;
   try {
-    console.log('[Server] Seeding & verifying database...');
-    await seedDatabase();
-    app.listen(PORT, () => {
-      console.log(`=================================================`);
-      console.log(`${PRODUCT_NAME} server running on http://localhost:${PORT}`);
-      console.log(`=================================================`);
-    });
+    server = await listen(app, PORT);
   } catch (err) {
-    console.error('[Server Error]: Failed to start server:', err);
-    throw err;
+    if (err.code === 'EADDRINUSE' && ALLOW_PORT_FALLBACK) {
+      console.warn(`[Server] Port ${PORT} is busy, using a free port instead.`);
+      server = await listen(app, 0);
+    } else {
+      throw err;
+    }
   }
+
+  const port = server.address().port;
+  const url = `http://127.0.0.1:${port}`;
+  console.log(`=================================================`);
+  console.log(`${PRODUCT_NAME} server running on ${url}`);
+  console.log(`=================================================`);
+  return { server, port, url };
 }
 
-startServer().catch((err) => {
+const ready = startServer();
+ready.catch((err) => {
   console.error('[Server Startup Fatal Error]:', err);
+  if (require.main === module) process.exit(1);
 });
+
+module.exports = { ready };

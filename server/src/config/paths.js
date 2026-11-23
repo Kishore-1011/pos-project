@@ -17,4 +17,9 @@ function getUploadsDirectory() {
   return path.join(SERVER_ROOT, 'uploads', 'items');
 }
 
-module.exports = { getDatabasePath, getUploadsDirectory };
+// Folder holding the DB and other per-install files (e.g. the JWT secret).
+function getDataDirectory() {
+  return path.dirname(getDatabasePath());
+}
+
+module.exports = { getDatabasePath, getUploadsDirectory, getDataDirectory };

@@ -40,6 +40,7 @@ export function AuditLogView() {
       case 'ITEM_PRICE_BULK':
         return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'VOID_ORDER':
+      case 'UNVOID_ORDER':
         return 'bg-rose-50 text-rose-700 border-rose-200';
       case 'USER_TOGGLE':
       case 'ITEM_TOGGLE_BULK':
@@ -78,7 +79,9 @@ export function AuditLogView() {
             <option value="ITEM_CATEGORY_BULK">ITEM_CATEGORY_BULK</option>
             <option value="ITEM_TOGGLE_BULK">ITEM_TOGGLE_BULK</option>
             <option value="VOID_ORDER">VOID_ORDER</option>
+            <option value="UNVOID_ORDER">UNVOID_ORDER</option>
             <option value="STATUS_CHANGE">STATUS_CHANGE</option>
+            <option value="SETTINGS_UPDATE">SETTINGS_UPDATE</option>
             <option value="USER_TOGGLE">USER_TOGGLE</option>
             <option value="USER_CREATE">USER_CREATE</option>
             <option value="USER_UPDATE">USER_UPDATE</option>

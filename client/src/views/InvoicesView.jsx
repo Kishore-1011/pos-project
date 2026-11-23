@@ -440,7 +440,9 @@ export function InvoicesView() {
             >
               <option value="ALL">All Modes</option>
               <option value="CASH">Cash</option>
-              <option value="UPI_CARD">UPI / Card</option>
+              <option value="UPI">UPI</option>
+              <option value="CARD">Card</option>
+              <option value="UPI_CARD">UPI + Card</option>
             </select>
           </div>
 

@@ -1,8 +1,12 @@
 const jwt = require('jsonwebtoken');
 const { get } = require('../db/database');
+const { getJwtSecret } = require('../config/secret');
 
-// TODO(Phase 0): replace this hard-coded fallback with a random per-install secret (see docs/PRODUCT_ANALYSIS.md).
-const JWT_SECRET = process.env.JWT_SECRET || 'pos_project_offline_secret_key';
+const JWT_OPTIONS = { algorithms: ['HS256'] };
+
+function signToken(payload) {
+  return jwt.sign(payload, getJwtSecret(), { algorithm: 'HS256', expiresIn: '24h' });
+}
 
 // Middleware to verify JWT and check live user active status
 async function authenticateToken(req, res, next) {
@@ -13,12 +17,17 @@ async function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Access token required' });
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
+    decoded = jwt.verify(token, getJwtSecret(), JWT_OPTIONS);
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  try {
     // Live database check: Verify user still exists and is ACTIVE
     const user = await get("SELECT id, username, full_name, role, is_active FROM users WHERE id = ?", [decoded.id]);
-    
+
     if (!user) {
       return res.status(401).json({ error: 'User account no longer exists' });
     }
@@ -30,7 +39,8 @@ async function authenticateToken(req, res, next) {
     req.user = user;
     next();
   } catch (err) {
-    return res.status(403).json({ error: 'Invalid or expired token' });
+    console.error('Auth Lookup Error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -47,5 +57,5 @@ function requireRole(...roles) {
 module.exports = {
   authenticateToken,
   requireRole,
-  JWT_SECRET
+  signToken
 };

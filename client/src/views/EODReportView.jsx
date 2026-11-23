@@ -163,11 +163,15 @@ export function EODReportView() {
   const handleVoidOrder = async (orderId) => {
     const reason = prompt('Enter reason for voiding this bill:');
     if (reason === null) return;
+    if (!reason.trim()) {
+      alert('A reason is required to void a bill.');
+      return;
+    }
 
     try {
       const res = await authFetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'VOID', notes: reason })
+        body: JSON.stringify({ status: 'VOID', reason: reason.trim() })
       });
 
       if (res.ok) {

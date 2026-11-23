@@ -4,12 +4,11 @@ import { STORAGE_PREFIX } from '../config/brand';
 const AuthContext = createContext(null);
 const TOKEN_KEY = `${STORAGE_PREFIX}_token`;
 
+// The UI is always served from the same origin as the API (the embedded server in the
+// desktop app, or the Vite dev server which proxies /api and /uploads), so URLs are relative.
 const resolveApiUrl = (url) => {
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  const baseUrl = (typeof window !== 'undefined' && window.location.protocol === 'file:') 
-    ? 'http://localhost:5000' 
-    : '';
-  return `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
+  return url.startsWith('/') ? url : `/${url}`;
 };
 
 export function AuthProvider({ children }) {

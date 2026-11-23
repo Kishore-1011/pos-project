@@ -31,14 +31,18 @@ npm install
 npm --prefix server install
 npm --prefix client install
 
-# Terminal 1: API on http://localhost:5000
+# Terminal 1: API on http://127.0.0.1:5000 (loopback only)
 npm --prefix server start
 
-# Terminal 2: UI on http://localhost:5173 (proxies /api to :5000)
+# Terminal 2: UI on http://localhost:5173 (proxies /api and /uploads to :5000)
 npm --prefix client run dev
 
-# Or run as the desktop app (uses the dev server if client/dist is not built)
+# Or run as the desktop app. If client/dist is built, the embedded server serves it;
+# otherwise the window loads the Vite dev server.
 npm start
+
+# Tests
+npm --prefix server test
 ```
 
 The database (`server/pos_project.db`) and uploads (`server/uploads/items/`) are created on first run and are git-ignored.

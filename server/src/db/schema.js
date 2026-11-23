@@ -92,6 +92,13 @@ async function initSchema() {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
+
+    -- Key/value app settings (Phase 2 Shop Settings will build on this)
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `;
 
   await exec(schemaSql);
@@ -123,6 +130,12 @@ async function initSchema() {
 
   try {
     await exec("ALTER TABLE customers ADD COLUMN is_active INTEGER DEFAULT 1;");
+  } catch (err) {
+    // Column already exists, safe to ignore
+  }
+
+  try {
+    await exec("ALTER TABLE orders ADD COLUMN void_reason TEXT;");
   } catch (err) {
     // Column already exists, safe to ignore
   }

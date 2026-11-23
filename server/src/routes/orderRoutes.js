@@ -3,6 +3,11 @@ const { all, get, run } = require('../db/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../services/auditService');
 const { INVOICE_PREFIX } = require('../config/brand');
+const { toPaise, fromPaise } = require('../utils/money');
+const { getSetting } = require('../services/settingsService');
+
+const MAX_ORDER_LINES = 200;
+const MAX_LINE_QUANTITY = 10000;
 
 const router = express.Router();
 
@@ -20,56 +25,116 @@ async function generateInvoiceNumber() {
 // POST /api/orders - Create New Bill
 router.post('/', async (req, res) => {
   try {
-    const { items, discount = 0, payment_method = 'CASH', cash_received = 0, notes = '', metadata = null, customer_id = null } = req.body;
+    const { items, discount = 0, payment_method = 'CASH', cash_received = 0, notes = '', metadata = null, customer_id = null } = req.body || {};
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Order must contain at least one item' });
     }
+    if (items.length > MAX_ORDER_LINES) {
+      return res.status(400).json({ error: `An order can have at most ${MAX_ORDER_LINES} lines` });
+    }
 
     if (!['CASH', 'UPI', 'CARD'].includes(payment_method)) {
-      return res.status(400).json({ error: 'Invalid payment method' });
+      return res.status(400).json({ error: 'Invalid payment method. Allowed: CASH, UPI, CARD' });
     }
 
-    const cleanCustomerId = customer_id ? parseInt(customer_id, 10) : null;
+    if (notes !== null && notes !== undefined && typeof notes !== 'string') {
+      return res.status(400).json({ error: 'Notes must be text' });
+    }
+    const cleanNotes = (notes || '').trim().slice(0, 500);
+
+    let cleanCustomerId = null;
     let customerInfo = null;
-    if (cleanCustomerId) {
-      customerInfo = await get("SELECT id, customer_code, name, phone FROM customers WHERE id = ?", [cleanCustomerId]);
+    if (customer_id !== null && customer_id !== undefined && customer_id !== '') {
+      cleanCustomerId = parseInt(customer_id, 10);
+      customerInfo = Number.isInteger(cleanCustomerId)
+        ? await get("SELECT id, customer_code, name, phone FROM customers WHERE id = ?", [cleanCustomerId])
+        : null;
+      if (!customerInfo) {
+        return res.status(400).json({ error: `Customer ${customer_id} not found` });
+      }
     }
 
-    // Process line items and compute subtotal
-    let subtotal = 0;
+    // Process line items and compute subtotal (in paise). Prices always come from the DB.
+    let subtotalPaise = 0;
     const lineItemsToInsert = [];
 
     for (const line of items) {
-      const dbItem = await get("SELECT id, name, price, is_active FROM items WHERE id = ?", [line.item_id]);
+      const itemId = Number(line && line.item_id);
+      const dbItem = Number.isInteger(itemId)
+        ? await get(
+            `SELECT i.id, i.name, i.price, i.is_active, c.is_active AS category_active
+             FROM items i LEFT JOIN categories c ON c.id = i.category_id
+             WHERE i.id = ?`,
+            [itemId]
+          )
+        : null;
       if (!dbItem) {
-        return res.status(400).json({ error: `Item ID ${line.item_id} not found` });
+        return res.status(400).json({ error: `Item ID ${line && line.item_id} not found` });
       }
-      const qty = parseInt(line.quantity, 10);
-      if (isNaN(qty) || qty <= 0) {
-        return res.status(400).json({ error: `Invalid quantity for item ${dbItem.name}` });
+      if (dbItem.is_active !== 1 || dbItem.category_active === 0) {
+        return res.status(400).json({ error: `Item "${dbItem.name}" is disabled and cannot be billed` });
       }
 
-      const itemSubtotal = dbItem.price * qty;
-      subtotal += itemSubtotal;
+      const qty = Number(line.quantity);
+      if (!Number.isInteger(qty) || qty <= 0 || qty > MAX_LINE_QUANTITY) {
+        return res.status(400).json({
+          error: `Invalid quantity for "${dbItem.name}": must be a whole number from 1 to ${MAX_LINE_QUANTITY}`
+        });
+      }
+
+      const unitPaise = toPaise(dbItem.price);
+      const linePaise = unitPaise * qty;
+      subtotalPaise += linePaise;
 
       lineItemsToInsert.push({
         item_id: dbItem.id,
         item_name: dbItem.name,
-        unit_price: dbItem.price,
+        unit_price: fromPaise(unitPaise),
         quantity: qty,
-        subtotal: itemSubtotal
+        subtotal: fromPaise(linePaise)
       });
     }
 
-    const discountAmount = Math.max(0, parseFloat(discount) || 0);
-    const finalAmount = Math.max(0, subtotal - discountAmount);
-
-    let changeGiven = 0;
-    if (payment_method === 'CASH') {
-      const received = parseFloat(cash_received) || 0;
-      changeGiven = Math.max(0, received - finalAmount);
+    const discountPaise = toPaise(discount === '' || discount === null ? 0 : discount);
+    if (Number.isNaN(discountPaise) || discountPaise < 0) {
+      return res.status(400).json({ error: 'Discount must be a non-negative amount' });
     }
+    if (discountPaise > subtotalPaise) {
+      return res.status(400).json({ error: 'Discount cannot be more than the bill subtotal' });
+    }
+    if (req.user.role !== 'ADMIN' && discountPaise > 0) {
+      const maxPct = await getSetting('cashier_max_discount_pct');
+      const maxDiscountPaise = Math.floor((subtotalPaise * maxPct) / 100);
+      if (discountPaise > maxDiscountPaise) {
+        return res.status(403).json({
+          error: `Cashiers can give at most ${maxPct}% discount (₹${fromPaise(maxDiscountPaise).toFixed(2)} on this bill). Ask an admin.`
+        });
+      }
+    }
+
+    const finalPaise = subtotalPaise - discountPaise;
+
+    // Cash must cover the total; digital payments are recorded as exactly the total.
+    let receivedPaise = finalPaise;
+    let changePaise = 0;
+    if (payment_method === 'CASH') {
+      receivedPaise = toPaise(cash_received === '' || cash_received === null ? 0 : cash_received);
+      if (Number.isNaN(receivedPaise) || receivedPaise < 0) {
+        return res.status(400).json({ error: 'Cash received must be a non-negative amount' });
+      }
+      if (receivedPaise < finalPaise) {
+        return res.status(400).json({
+          error: `Cash received (₹${fromPaise(receivedPaise).toFixed(2)}) is less than the total (₹${fromPaise(finalPaise).toFixed(2)})`
+        });
+      }
+      changePaise = receivedPaise - finalPaise;
+    }
+
+    const subtotal = fromPaise(subtotalPaise);
+    const discountAmount = fromPaise(discountPaise);
+    const finalAmount = fromPaise(finalPaise);
+    const changeGiven = fromPaise(changePaise);
 
     const invoiceNo = await generateInvoiceNumber();
     const metadataStr = metadata ? JSON.stringify(metadata) : null;
@@ -90,9 +155,9 @@ router.post('/', async (req, res) => {
         discountAmount,
         finalAmount,
         payment_method,
-        parseFloat(cash_received) || 0,
+        fromPaise(receivedPaise),
         changeGiven,
-        notes.trim(),
+        cleanNotes,
         metadataStr,
         nowIso,
         nowIso
@@ -328,7 +393,10 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
   try {
     const orderId = parseInt(req.params.id, 10);
-    const { status, notes } = req.body;
+    const { status } = req.body || {};
+    // `notes` was used as the void reason by older clients; accept it as a fallback.
+    const rawReason = req.body && (req.body.reason !== undefined ? req.body.reason : req.body.notes);
+    const reason = typeof rawReason === 'string' ? rawReason.trim().slice(0, 500) : '';
 
     if (!['PAID', 'PENDING', 'VOID'].includes(status)) {
       return res.status(400).json({ error: 'Invalid order status. Allowed: PAID, PENDING, VOID' });
@@ -339,16 +407,26 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    const newNotes = notes !== undefined ? notes.trim() : oldOrder.notes;
+    if (oldOrder.payment_status === status) {
+      return res.status(400).json({ error: `Order is already ${status}` });
+    }
+
+    const isVoiding = status === 'VOID';
+    const isUnvoiding = oldOrder.payment_status === 'VOID';
+    if ((isVoiding || isUnvoiding) && reason.length < 3) {
+      return res.status(400).json({
+        error: isVoiding ? 'A reason is required to void a bill' : 'A reason is required to restore a voided bill'
+      });
+    }
 
     await run(
-      `UPDATE orders SET payment_status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [status, newNotes, orderId]
+      `UPDATE orders SET payment_status = ?, void_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [status, isVoiding ? reason : oldOrder.void_reason, orderId]
     );
 
     const updatedOrder = await get("SELECT * FROM orders WHERE id = ?", [orderId]);
 
-    const actionType = status === 'VOID' ? 'VOID_ORDER' : 'STATUS_CHANGE';
+    const actionType = isVoiding ? 'VOID_ORDER' : (isUnvoiding ? 'UNVOID_ORDER' : 'STATUS_CHANGE');
 
     await logAudit({
       userId: req.user.id,
@@ -356,8 +434,8 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
       action: actionType,
       entityType: 'order',
       entityId: orderId,
-      oldValue: { payment_status: oldOrder.payment_status, notes: oldOrder.notes },
-      newValue: { payment_status: updatedOrder.payment_status, notes: updatedOrder.notes }
+      oldValue: { payment_status: oldOrder.payment_status },
+      newValue: { payment_status: updatedOrder.payment_status, reason: reason || null }
     });
 
     return res.json(updatedOrder);

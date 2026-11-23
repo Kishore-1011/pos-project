@@ -38,25 +38,19 @@ process.on('unhandledRejection', (err) => logError(err));
 
 let mainWindow = null;
 
-// Start Express Backend inside the Electron lifecycle
-function startBackend() {
-  try {
-    const serverIndex = path.join(__dirname, '..', 'server', 'src', 'index.js');
-    if (fs.existsSync(serverIndex)) {
-      require(serverIndex);
-      console.log('[Electron] Embedded backend initialized.');
-    } else {
-      const err = new Error(`Server entry file not found at: ${serverIndex}`);
-      console.error('[Electron]', err);
-      logError(err);
-    }
-  } catch (err) {
-    console.error('[Electron] Failed to start backend server:', err);
-    logError(err);
+// Start Express Backend inside the Electron lifecycle. Resolves with the server URL.
+async function startBackend() {
+  const serverIndex = path.join(__dirname, '..', 'server', 'src', 'index.js');
+  if (!fs.existsSync(serverIndex)) {
+    throw new Error(`Server entry file not found at: ${serverIndex}`);
   }
+  const { ready } = require(serverIndex);
+  const { url } = await ready;
+  console.log(`[Electron] Embedded backend initialized at ${url}`);
+  return url;
 }
 
-function createWindow() {
+function createWindow(serverUrl) {
   const iconDist = path.join(__dirname, '..', 'client', 'dist', 'favicon.svg');
   const iconPublic = path.join(__dirname, '..', 'client', 'public', 'favicon.svg');
   const iconPath = fs.existsSync(iconDist) ? iconDist : (fs.existsSync(iconPublic) ? iconPublic : undefined);
@@ -76,16 +70,16 @@ function createWindow() {
     }
   });
 
-  // Load production bundle if built, or local dev server
+  // Built UI is served by the embedded server (same origin as the API); otherwise use the Vite dev server
   const clientDist = path.join(__dirname, '..', 'client', 'dist', 'index.html');
   if (fs.existsSync(clientDist)) {
-    mainWindow.loadFile(clientDist);
+    mainWindow.loadURL(serverUrl);
   } else {
     mainWindow.loadURL('http://localhost:5173');
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (url.startsWith('https://') || url.startsWith('http://')) shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -95,7 +89,7 @@ function createWindow() {
 }
 
 // App lifecycle initialization: userData accessed ONLY inside app.whenReady()
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const isPackaged = app.isPackaged;
   const userDataPath = app.getPath('userData');
   const dbDir = path.join(userDataPath, 'data');
@@ -111,13 +105,22 @@ app.whenReady().then(() => {
   process.env.POS_USER_DATA_PATH = userDataPath;
   process.env.POS_DB_PATH = dbPath;
   process.env.POS_UPLOADS_PATH = uploadsDir;
+  process.env.POS_PORT_FALLBACK = 'true';
 
-  startBackend();
-  createWindow();
+  let serverUrl;
+  try {
+    serverUrl = await startBackend();
+  } catch (err) {
+    console.error('[Electron] Failed to start backend server:', err);
+    logError(err);
+    app.quit();
+    return;
+  }
+  createWindow(serverUrl);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow(serverUrl);
     }
   });
 });

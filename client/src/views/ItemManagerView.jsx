@@ -124,7 +124,7 @@ export function ItemManagerView() {
     setPrice(String(item.price));
     setCategoryId(item.category_id ? String(item.category_id) : '');
     setSelectedFile(null);
-    setPreviewUrl(item.image_url ? `http://localhost:5000${item.image_url}` : '');
+    setPreviewUrl(item.image_url || '');
     setShowAddModal(true);
   };
 
@@ -444,7 +444,7 @@ export function ItemManagerView() {
                       <td className="px-4 py-3">
                         {item.image_url ? (
                           <img
-                            src={`http://localhost:5000${item.image_url}`}
+                            src={item.image_url}
                             alt={item.name}
                             className="w-11 h-11 rounded-xl object-cover border border-slate-200"
                           />
