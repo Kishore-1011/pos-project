@@ -9,8 +9,32 @@ const SERIES_TARGETS = {
 
 const RESET_POLICIES = ['NEVER', 'FINANCIAL_YEAR', 'YEARLY', 'MONTHLY', 'DAILY'];
 const SEPARATORS = ['/', '-', ''];
-const GST_INVOICE_MAX_LENGTH = 16; // GST rule: invoice number up to 16 characters
-const AFFIX_PATTERN = /^[A-Za-z0-9/-]*$/; // GST rule: letters, digits, '-' and '/' only
+
+// GST invoice rules apply only when the business is GST-registered (Regular or Composition).
+const GST_INVOICE_MAX_LENGTH = 16; // GST: invoice number up to 16 characters
+const GST_AFFIX_PATTERN = /^[A-Za-z0-9/-]*$/; // GST: letters, digits, '-' and '/' only
+// Everyone else (and customer codes): a bit more freedom, but still no spaces or odd symbols.
+const MAX_LENGTH = 30;
+const AFFIX_PATTERN = /^[A-Za-z0-9/_.#-]*$/;
+
+/** True when the shop is GST-registered, so invoice numbers must follow GST rules. */
+function gstRulesApply() {
+  const row = getSync('SELECT gst_registration_type FROM organization WHERE id = 1');
+  return Boolean(row && row.gst_registration_type !== 'UNREGISTERED');
+}
+
+/** GST problems with an invoice series configuration (empty list = compliant). */
+function gstIssues(s, date = new Date()) {
+  const issues = [];
+  const sample = formatNumber(s, 10 ** (s.padding - 1), periodFor(s.reset_policy, date).token);
+  if (sample.length > GST_INVOICE_MAX_LENGTH) {
+    issues.push(`GST allows at most ${GST_INVOICE_MAX_LENGTH} characters; "${sample}" is ${sample.length}`);
+  }
+  if (!GST_AFFIX_PATTERN.test(s.prefix) || !GST_AFFIX_PATTERN.test(s.suffix || '')) {
+    issues.push("GST allows only letters, digits, '-' and '/' in invoice numbers");
+  }
+  return issues;
+}
 
 class SeriesError extends Error {
   constructor(fields, status = 400) {
@@ -115,11 +139,14 @@ function validateSeriesPatch(code, patch, current, date = new Date()) {
   const allowed = new Set(['prefix', 'separator', 'include_period', 'padding', 'suffix', 'reset_policy', 'start_number', 'next_number']);
   for (const key of Object.keys(patch)) if (!allowed.has(key)) errors[key] = 'Unknown or read-only field';
 
+  const gstApplies = code === 'INVOICE' && gstRulesApply();
   for (const key of ['prefix', 'suffix']) {
     if (key in patch) {
       const v = str(patch[key]);
       if (v.length > 10) errors[key] = 'At most 10 characters';
-      else if (!AFFIX_PATTERN.test(v)) errors[key] = "Only letters, digits, '-' and '/' are allowed";
+      else if (gstApplies && !GST_AFFIX_PATTERN.test(v)) {
+        errors[key] = "GST-registered businesses can use only letters, digits, '-' and '/'";
+      } else if (!AFFIX_PATTERN.test(v)) errors[key] = "Only letters, digits and - / _ . # are allowed (no spaces)";
       else changes[key] = v;
     }
   }
@@ -160,8 +187,11 @@ function validateSeriesPatch(code, patch, current, date = new Date()) {
   }
   const period = periodFor(next.reset_policy, date);
   const sample = formatNumber(next, Math.max(nextNumber || 1, 10 ** (next.padding - 1)), period.token);
-  if (code === 'INVOICE' && sample.length > GST_INVOICE_MAX_LENGTH) {
-    errors.prefix = `Invoice numbers can be at most ${GST_INVOICE_MAX_LENGTH} characters for GST; "${sample}" is ${sample.length}`;
+  const maxLength = gstApplies ? GST_INVOICE_MAX_LENGTH : MAX_LENGTH;
+  if (sample.length > maxLength) {
+    errors.prefix = gstApplies
+      ? `GST allows invoice numbers of at most ${GST_INVOICE_MAX_LENGTH} characters; "${sample}" is ${sample.length}`
+      : `Numbers can be at most ${MAX_LENGTH} characters; "${sample}" is ${sample.length}`;
   }
 
   if (nextNumber !== null) {
@@ -196,12 +226,16 @@ function applySeriesUpdate(code, { changes, nextNumber, periodKey }) {
 function describe(code, date = new Date()) {
   const s = getSeries(code);
   const next = peekNext(code, date);
+  const gstApplies = code === 'INVOICE' && gstRulesApply();
   return {
     ...s,
     include_period: s.include_period === 1,
     next_value: next.value,
     next_number: next.number,
-    current_period: next.period_key
+    current_period: next.period_key,
+    gst_rules_apply: gstApplies,
+    // Format saved before the shop registered for GST may not meet GST rules; shown, not blocked.
+    warnings: gstApplies ? gstIssues(s, date) : []
   };
 }
 
@@ -212,7 +246,8 @@ function listSeries(date = new Date()) {
 const OPTIONS = {
   reset_policies: RESET_POLICIES,
   separators: SEPARATORS,
-  invoice_max_length: GST_INVOICE_MAX_LENGTH
+  max_length: MAX_LENGTH,
+  gst_invoice_max_length: GST_INVOICE_MAX_LENGTH
 };
 
 module.exports = {
@@ -228,5 +263,7 @@ module.exports = {
   applySeriesUpdate,
   describe,
   listSeries,
+  gstRulesApply,
+  gstIssues,
   OPTIONS
 };

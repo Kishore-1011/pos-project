@@ -1,5 +1,6 @@
 const { getSync, allSync, runSync } = require('../db/database');
 const india = require('../utils/india');
+const numberSeries = require('./numberSeriesService');
 
 const BUSINESS_TYPES = ['FOOD', 'RETAIL', 'SERVICES'];
 const REGISTRATION_TYPES = ['REGULAR', 'COMPOSITION', 'UNREGISTERED'];
@@ -223,6 +224,15 @@ function complianceWarnings(org, licences, today) {
       code: 'FSSAI_MISSING',
       message: 'Food businesses must show an FSSAI licence or registration number on bills.'
     });
+  }
+  if (org.gst_registration_type !== 'UNREGISTERED') {
+    const invoiceSeries = numberSeries.getSeries('INVOICE');
+    if (invoiceSeries && numberSeries.gstIssues(invoiceSeries).length) {
+      warnings.push({
+        code: 'INVOICE_SERIES_NOT_GST',
+        message: 'Your invoice number format does not meet GST rules (max 16 characters; letters, digits, - and / only). Update it in Number Series.'
+      });
+    }
   }
   const soon = new Date(`${today}T00:00:00Z`);
   soon.setUTCDate(soon.getUTCDate() + 30);

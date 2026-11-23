@@ -73,16 +73,62 @@ test('invoice numbers restart at 0001 on 1 April (IST midnight), and never repea
   assert.equal(allocateAt('INVOICE', MAR31_2359_IST), 'INV/29-30/0003');
 });
 
-test('format validation: allowed characters, GST 16-character limit, period required when resetting', async () => {
-  let r = await putSeries('INVOICE', { prefix: 'INV#', suffix: 'A B' });
+const putOrg = (body) => t.call('PUT', '/api/organization', { token: admin, body });
+const getInvoiceSeries = async () =>
+  (await t.call('GET', '/api/number-series', { token: admin })).body.series.find((s) => s.code === 'INVOICE');
+
+test('not GST-registered: GST invoice rules do not apply (longer numbers, more symbols)', async () => {
+  assert.equal((await getInvoiceSeries()).gst_rules_apply, false);
+
+  let r = await putSeries('INVOICE', { prefix: 'SHOPNAME', padding: 6 }); // SHOPNAME/26-27/000001 = 21 chars
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  r = await putSeries('INVOICE', { prefix: 'BILL#', suffix: '_A' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.match((await bill()).body.invoice_no, /^BILL#\/\d{2}-\d{2}\/\d{6}_A$/);
+
+  // Still no spaces or odd symbols, and a sane overall length
+  r = await putSeries('INVOICE', { prefix: 'A B', suffix: 'x@y' });
   assert.equal(r.status, 400);
   assert.ok(r.body.fields.prefix && r.body.fields.suffix);
-
-  r = await putSeries('INVOICE', { prefix: 'SHOPNAME', padding: 6 }); // SHOPNAME/25-26/000001 = 21 chars
+  r = await putSeries('INVOICE', { prefix: 'ABCDEFGHIJ', suffix: 'KLMNOPQRST', padding: 8 });
   assert.equal(r.status, 400);
-  assert.match(r.body.fields.prefix, /16 characters/);
+  assert.match(r.body.fields.prefix, /30 characters/);
 
-  r = await putSeries('INVOICE', { include_period: false });
+  await putSeries('INVOICE', { prefix: 'INV', suffix: '', padding: 4 });
+});
+
+test('GST-registered: invoice numbers must follow GST rules; registering later only warns', async () => {
+  // Non-compliant format saved while unregistered...
+  assert.equal((await putSeries('INVOICE', { prefix: 'BILL#', padding: 6 })).status, 200);
+
+  // ...then the shop registers for GST: allowed, with a warning on both screens
+  const org = await putOrg({ gst_registration_type: 'REGULAR', gstin: '27AAPFU0939F1ZV' });
+  assert.equal(org.status, 200, JSON.stringify(org.body));
+  assert.ok(org.body.warnings.some((w) => w.code === 'INVOICE_SERIES_NOT_GST'));
+  const inv = await getInvoiceSeries();
+  assert.equal(inv.gst_rules_apply, true);
+  assert.equal(inv.warnings.length, 2, JSON.stringify(inv.warnings)); // too long + '#'
+
+  // New non-compliant changes are now refused
+  let r = await putSeries('INVOICE', { prefix: 'SHOPNAME' });
+  assert.equal(r.status, 400);
+  assert.match(r.body.fields.prefix, /GST/);
+  r = await putSeries('INVOICE', { prefix: 'INV_A' });
+  assert.equal(r.status, 400);
+  assert.match(r.body.fields.prefix, /GST/);
+
+  // Fixing the format clears the warnings
+  r = await putSeries('INVOICE', { prefix: 'INV', padding: 4 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.series.warnings, []);
+  const org2 = await t.call('GET', '/api/organization', { token: admin });
+  assert.ok(!org2.body.warnings.some((w) => w.code === 'INVOICE_SERIES_NOT_GST'));
+
+  await putOrg({ gst_registration_type: 'UNREGISTERED', gstin: '', pan: '' });
+});
+
+test('format validation that always applies: period required when resetting, valid options', async () => {
+  let r = await putSeries('INVOICE', { include_period: false });
   assert.equal(r.status, 400);
   assert.match(r.body.fields.include_period, /repeat/);
 
