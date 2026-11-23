@@ -19,7 +19,7 @@ async function resetAndSeed() {
     const adminPasswordHash = await bcrypt.hash('admin123', 10);
     await run(
       `INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, 1)`,
-      ['admin', adminPasswordHash, 'System Administrator', 'ADMIN']
+      ['admin', adminPasswordHash, 'System Administrator', 'OWNER']
     );
     console.log('[Seed] Initialized default admin account (admin / admin123).');
   }

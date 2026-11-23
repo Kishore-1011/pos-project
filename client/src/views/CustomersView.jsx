@@ -12,8 +12,7 @@ import {
 } from 'lucide-react';
 
 export function CustomersView() {
-  const { authFetch, user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
+  const { authFetch } = useAuth();
 
   const [customers, setCustomers] = useState([]);
   const [stats, setStats] = useState({

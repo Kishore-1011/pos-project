@@ -139,7 +139,7 @@ test('discount can never exceed the subtotal or be negative', async () => {
   assert.equal(junk.status, 400);
 });
 
-test('cashier discount is capped by the admin setting; admin is not', async () => {
+test("cashier discount is capped by the role's limit; owner is not", async () => {
   // default cap 20%: ₹100 bill (4 x 15 + 4 x 10.10 = 100.40) -> max ₹20.08
   const items = [line(samosa, 4), line(tea, 4)];
   const over = await order(cashier, { items, payment_method: 'UPI', discount: 25 });
@@ -149,19 +149,20 @@ test('cashier discount is capped by the admin setting; admin is not', async () =
   const adminBig = await order(admin, { items, payment_method: 'UPI', discount: 50 });
   assert.equal(adminBig.status, 201);
 
-  // admin changes the cap to 50%; cashier may now give ₹25
-  const set = await t.call('PUT', '/api/settings', { token: admin, body: { cashier_max_discount_pct: 50 } });
-  assert.equal(set.status, 200);
-  assert.equal(set.body.cashier_max_discount_pct, 50);
+  // owner raises the Cashier role's limit to 50%; cashier may now give ₹25
+  const set = await t.call('PUT', '/api/roles/CASHIER', { token: admin, body: { max_discount_pct: 50 } });
+  assert.equal(set.status, 200, JSON.stringify(set.body));
+  assert.equal(set.body.role.max_discount_pct, 50);
   assert.equal((await order(cashier, { items, payment_method: 'UPI', discount: 25 })).status, 201);
-  await t.call('PUT', '/api/settings', { token: admin, body: { cashier_max_discount_pct: 20 } });
+  await t.call('PUT', '/api/roles/CASHIER', { token: admin, body: { max_discount_pct: 20 } });
 });
 
-test('settings: cashiers cannot change them and bad values are rejected', async () => {
-  assert.equal((await t.call('PUT', '/api/settings', { token: cashier, body: { cashier_max_discount_pct: 100 } })).status, 403);
-  assert.equal((await t.call('PUT', '/api/settings', { token: admin, body: { cashier_max_discount_pct: 150 } })).status, 400);
+test('settings and role limits: cashiers cannot change them and bad values are rejected', async () => {
+  assert.equal((await t.call('PUT', '/api/roles/CASHIER', { token: cashier, body: { max_discount_pct: 100 } })).status, 403);
+  assert.equal((await t.call('PUT', '/api/roles/CASHIER', { token: admin, body: { max_discount_pct: 150 } })).status, 400);
+  assert.equal((await t.call('PUT', '/api/settings', { token: cashier, body: { time_zone: 'Asia/Dubai' } })).status, 403);
   assert.equal((await t.call('PUT', '/api/settings', { token: admin, body: { unknown_key: 1 } })).status, 400);
-  assert.equal((await t.call('GET', '/api/settings', { token: cashier })).body.cashier_max_discount_pct, 20);
+  assert.equal((await t.call('GET', '/api/auth/me', { token: cashier })).body.user.max_discount_pct, 20);
 });
 
 test('disabled items, and items in disabled categories, cannot be billed', async () => {

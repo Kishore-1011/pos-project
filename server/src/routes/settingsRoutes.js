@@ -1,6 +1,6 @@
 const express = require('express');
 const { transaction } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const { getAllSettingsSync, updateSettingsSync, SettingError } = require('../services/settingsService');
 const { logAuditSync } = require('../services/auditService');
 const calendar = require('../services/calendar');
@@ -20,7 +20,7 @@ router.get('/', (req, res) => {
 });
 
 // PUT /api/settings - Admin only, partial update of known keys (audited)
-router.put('/', requireRole('ADMIN'), (req, res) => {
+router.put('/', requirePermission('settings.manage'), (req, res) => {
   try {
     transaction(() => {
       const before = getAllSettingsSync();

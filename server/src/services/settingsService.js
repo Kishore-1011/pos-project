@@ -19,17 +19,7 @@ function isValidTimeZone(tz) {
 // Known settings: default, parse (validate + normalize, throws SettingError) and optional guard
 // (checks whether a change is allowed given current data). Phase 2 (Shop Settings) extends this list.
 const SETTINGS = {
-  // Max discount a CASHIER may give on one bill, as % of subtotal. Admins are not limited.
-  cashier_max_discount_pct: {
-    default: 20,
-    parse: (v) => {
-      const n = Number(v);
-      if (v === null || v === '' || !Number.isFinite(n) || n < 0 || n > 100) {
-        throw new SettingError('cashier_max_discount_pct must be a number between 0 and 100');
-      }
-      return n;
-    }
-  },
+  // (Discount limits are per role since Phase 1 step 7: see roles.max_discount_pct.)
 
   // Shop's time zone (IANA name). Decides the local date of every bill for reports and numbering.
   time_zone: {

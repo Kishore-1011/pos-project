@@ -100,7 +100,7 @@ export function AuthProvider({ children }) {
     if (res.status === 403 || res.status === 401) {
       const data = await res.clone().json().catch(() => ({}));
       if (data.error && data.error.includes('deactivated')) {
-        alert('⚠️ Your account has been deactivated by an Administrator. Access revoked.');
+        alert('⚠️ Your account has been deactivated by the shop owner. Access revoked.');
         logout();
       }
     }
@@ -108,8 +108,12 @@ export function AuthProvider({ children }) {
     return res;
   };
 
+  // Permission check for showing/hiding screens and buttons. The server enforces the same rules;
+  // this only keeps the UI from offering actions that would be refused.
+  const can = (permission) => Boolean(user && Array.isArray(user.permissions) && user.permissions.includes(permission));
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, authFetch }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, authFetch, can }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,6 +1,6 @@
 const express = require('express');
 const { all, get, run } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const { logAudit } = require('../services/auditService');
 const { createImageUpload } = require('../services/imageUpload');
 const { toPaise, fromPaise } = require('../utils/money');
@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/items - Admin Only (Supports Multer file upload 'image')
-router.post('/', requireRole('ADMIN'), upload.single('image'), async (req, res) => {
+router.post('/', requirePermission('items.manage'), upload.single('image'), async (req, res) => {
   try {
     const { name, price, category_id, image_url } = req.body;
     const cleanPrice = parsePrice(price);
@@ -90,7 +90,7 @@ router.post('/', requireRole('ADMIN'), upload.single('image'), async (req, res) 
 });
 
 // PUT /api/items/:id - Admin Only (Supports Multer file upload 'image')
-router.put('/:id', requireRole('ADMIN'), upload.single('image'), async (req, res) => {
+router.put('/:id', requirePermission('items.manage'), upload.single('image'), async (req, res) => {
   try {
     const itemId = parseInt(req.params.id, 10);
     const { name, price, category_id, image_url } = req.body;
@@ -139,7 +139,7 @@ router.put('/:id', requireRole('ADMIN'), upload.single('image'), async (req, res
 });
 
 // PATCH /api/items/:id/status - Admin Only
-router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
+router.patch('/:id/status', requirePermission('items.manage'), async (req, res) => {
   try {
     const itemId = parseInt(req.params.id, 10);
     const { is_active } = req.body;
@@ -174,7 +174,7 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
 });
 
 // PATCH /api/items/bulk - Admin Bulk Update Items (Status, Category, Price)
-router.patch('/bulk', requireRole('ADMIN'), async (req, res) => {
+router.patch('/bulk', requirePermission('items.manage'), async (req, res) => {
   try {
     const { item_ids, action, value } = req.body;
 

@@ -5,20 +5,19 @@ import { ShoppingCart, FileText, Utensils, Users, ClipboardList, BarChart3, LogO
 import { PRODUCT_NAME, PRODUCT_SHORT } from '../config/brand';
 
 export function MainLayout({ activeTab, setActiveTab, searchQuery, setSearchQuery, searchInputRef, children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
 
   if (!user) return children;
 
-  const isAdmin = user.role === 'ADMIN';
-
+  // Menu built from the user's permissions (must match the screen map in App.jsx)
   const navItems = [
-    { id: 'billing', label: 'Billing', icon: ShoppingCart, roleRequired: 'ALL' },
-    { id: 'items', label: 'Item Master', icon: Utensils, roleRequired: 'ADMIN' },
-    { id: 'customers', label: 'Customer Master', icon: UserCheck, roleRequired: 'ALL' },
-    { id: 'invoices', label: 'Order & Invoice', icon: FileText, roleRequired: 'ALL' },
-    { id: 'reports', label: 'Reports', icon: BarChart3, roleRequired: 'ADMIN' },
-    { id: 'users', label: 'Staff Users', icon: Users, roleRequired: 'ADMIN' },
-    { id: 'audit', label: 'Audit Trail', icon: ClipboardList, roleRequired: 'ADMIN' },
+    { id: 'billing', label: 'Billing', icon: ShoppingCart, permission: 'billing.create' },
+    { id: 'items', label: 'Item Master', icon: Utensils, permission: 'items.manage' },
+    { id: 'customers', label: 'Customer Master', icon: UserCheck, permission: 'customers.view' },
+    { id: 'invoices', label: 'Order & Invoice', icon: FileText, permission: 'orders.view' },
+    { id: 'reports', label: 'Reports', icon: BarChart3, permission: 'reports.view' },
+    { id: 'users', label: 'Staff Users', icon: Users, permission: 'users.manage' },
+    { id: 'audit', label: 'Audit Trail', icon: ClipboardList, permission: 'audit.view' },
   ];
 
   return (
@@ -38,7 +37,7 @@ export function MainLayout({ activeTab, setActiveTab, searchQuery, setSearchQuer
         {/* Navigation Icon Buttons */}
         <nav className="flex flex-col items-center gap-3 w-full px-2">
           {navItems.map((item) => {
-            if (item.roleRequired === 'ADMIN' && !isAdmin) return null;
+            if (!can(item.permission)) return null;
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 

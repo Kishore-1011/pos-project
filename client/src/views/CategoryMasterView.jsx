@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 export function CategoryMasterView({ onCategoryUpdated }) {
-  const { authFetch, user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
+  const { authFetch, can } = useAuth();
+  const isAdmin = can('items.manage');
 
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);

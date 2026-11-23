@@ -1,13 +1,13 @@
 const express = require('express');
 const { transaction } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const { logAuditSync } = require('../services/auditService');
 const series = require('../services/numberSeriesService');
 
 const router = express.Router();
 
 router.use(authenticateToken);
-router.use(requireRole('ADMIN'));
+router.use(requirePermission('settings.manage'));
 
 function findSeries(req, res) {
   const code = String(req.params.code || '').toUpperCase();

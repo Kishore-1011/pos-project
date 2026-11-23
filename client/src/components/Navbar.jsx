@@ -8,7 +8,7 @@ export function Navbar({ searchQuery, setSearchQuery, searchInputRef }) {
 
   if (!user) return null;
 
-  const isAdmin = user.role === 'ADMIN';
+  const isAdmin = user.role === 'OWNER' || (user.permissions || []).includes('users.manage');
   const todayDateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     day: 'numeric',
@@ -60,7 +60,7 @@ export function Navbar({ searchQuery, setSearchQuery, searchInputRef }) {
                 {user.full_name}
               </span>
               <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">
-                {todayDateStr} • <span className="text-blue-600 dark:text-emerald-400 font-bold uppercase">{user.role}</span>
+                {todayDateStr} • <span className="text-blue-600 dark:text-emerald-400 font-bold uppercase">{user.role_name || user.role}</span>
               </span>
             </div>
           </div>

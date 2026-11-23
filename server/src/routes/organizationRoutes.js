@@ -1,6 +1,6 @@
 const express = require('express');
 const { transaction } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const { logAuditSync } = require('../services/auditService');
 const { createImageUpload, removeUploadedFile } = require('../services/imageUpload');
 const org = require('../services/organizationService');
@@ -36,7 +36,7 @@ router.get('/', (req, res) => {
 });
 
 // PUT /api/organization - partial update of profile & tax fields (admin)
-router.put('/', requireRole('ADMIN'), (req, res) => {
+router.put('/', requirePermission('settings.manage'), (req, res) => {
   try {
     const before = org.getOrganization();
     const changes = org.validateOrganizationPatch(req.body, before);
@@ -64,7 +64,7 @@ router.put('/', requireRole('ADMIN'), (req, res) => {
 });
 
 // PUT /api/organization/licences - replace the whole licence list (admin)
-router.put('/licences', requireRole('ADMIN'), (req, res) => {
+router.put('/licences', requirePermission('settings.manage'), (req, res) => {
   try {
     const rows = org.validateLicences(req.body && req.body.licences);
     const before = org.getLicences();
@@ -87,7 +87,7 @@ router.put('/licences', requireRole('ADMIN'), (req, res) => {
 });
 
 // POST /api/organization/logo - upload the shop logo, field "logo" (admin)
-router.post('/logo', requireRole('ADMIN'), logoUpload.single('logo'), (req, res) => {
+router.post('/logo', requirePermission('settings.manage'), logoUpload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Choose an image file to upload' });
   const before = org.getOrganization().logo_url;
   const logoUrl = `/uploads/branding/${req.file.filename}`;
@@ -103,7 +103,7 @@ router.post('/logo', requireRole('ADMIN'), logoUpload.single('logo'), (req, res)
 });
 
 // DELETE /api/organization/logo (admin)
-router.delete('/logo', requireRole('ADMIN'), (req, res) => {
+router.delete('/logo', requirePermission('settings.manage'), (req, res) => {
   const before = org.getOrganization().logo_url;
   if (before) {
     transaction(() => {

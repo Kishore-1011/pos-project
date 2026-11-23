@@ -1,12 +1,12 @@
 const express = require('express');
 const { all, get } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const calendar = require('../services/calendar');
 
 const router = express.Router();
 
 router.use(authenticateToken);
-router.use(requireRole('ADMIN'));
+router.use(requirePermission('reports.view'));
 
 const rupees = (paise) => Math.round(paise) / 100;
 

@@ -1,212 +1,137 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { all, get, run } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
-const { logAudit } = require('../services/auditService');
+const { transaction } = require('../db/database');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
+const { logAuditSync } = require('../services/auditService');
+const users = require('../services/userService');
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
-// GET /api/users - Available to all authenticated staff for cashier/filter dropdowns
-router.get('/', async (req, res) => {
-  try {
-    const users = await all(
-      "SELECT id, username, full_name, role, is_active, created_at, updated_at FROM users ORDER BY id DESC"
-    );
-    return res.json(users);
-  } catch (err) {
-    console.error('Fetch Users Error:', err);
-    return res.status(500).json({ error: 'Failed to fetch users' });
+const publicUser = (u) => (u ? { ...u, has_pin: u.has_pin === 1 || u.has_pin === true } : u);
+
+function sendError(res, err) {
+  if (err instanceof users.UserError) {
+    return res.status(err.status).json({ error: err.fields._ || err.message, fields: err.fields });
   }
+  throw err;
+}
+
+function audit(req, action, entityId, oldValue, newValue) {
+  logAuditSync({ userId: req.user.id, userName: req.user.username, action, entityType: 'user', entityId, oldValue, newValue });
+}
+
+function findUser(req, res) {
+  const user = users.getUser(parseInt(req.params.id, 10));
+  if (!user) res.status(404).json({ error: 'User not found' });
+  return user;
+}
+
+// GET /api/users - all staff (staff filters, cashier names); full profiles only for user managers
+router.get('/', (req, res) => {
+  res.json(users.listUsers({ full: req.can('users.manage') }));
 });
 
-// Admin-only guard for user management operations
-router.use(requireRole('ADMIN'));
+router.use(requirePermission('users.manage'));
 
-// POST /api/users
+// POST /api/users - create (username, full_name, role, password; optional phone, email, pin)
 router.post('/', async (req, res) => {
   try {
-    const { username, password, full_name, role } = req.body;
-
-    if (!username || !password || !full_name || !role) {
-      return res.status(400).json({ error: 'All fields (username, password, full_name, role) are required' });
-    }
-
-    if (!['ADMIN', 'CASHIER'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role. Allowed values: ADMIN, CASHIER' });
-    }
-
-    const existing = await get("SELECT id FROM users WHERE username = ?", [username.trim()]);
-    if (existing) {
-      return res.status(400).json({ error: 'Username already exists' });
-    }
-
-    const password_hash = await bcrypt.hash(password, 10);
-
-    const result = await run(
-      `INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, 1)`,
-      [username.trim(), password_hash, full_name.trim(), role]
-    );
-
-    const newUser = await get(
-      "SELECT id, username, full_name, role, is_active, created_at FROM users WHERE id = ?",
-      [result.lastInsertRowid]
-    );
-
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: 'USER_CREATE',
-      entityType: 'user',
-      entityId: newUser.id,
-      newValue: { username: newUser.username, role: newUser.role, full_name: newUser.full_name }
+    const prepared = await users.createUser(req.body, req.user);
+    const id = transaction(() => {
+      const newId = users.insertUser(prepared);
+      audit(req, 'USER_CREATE', newId, null, {
+        username: prepared.out.username, full_name: prepared.out.full_name, role: prepared.out.role, pin_set: Boolean(prepared.pinHash)
+      });
+      return newId;
     });
-
-    return res.status(201).json(newUser);
+    return res.status(201).json(publicUser(users.getUser(id)));
   } catch (err) {
-    console.error('Create User Error:', err);
-    return res.status(500).json({ error: 'Failed to create user' });
+    return sendError(res, err);
   }
 });
 
-// PATCH /api/users/:id/status
-router.patch('/:id/status', async (req, res) => {
+// PUT /api/users/:id - partial profile update (username, full_name, role, phone, email)
+router.put('/:id', (req, res) => {
+  const existing = findUser(req, res);
+  if (!existing) return;
   try {
-    const userId = parseInt(req.params.id, 10);
-    const { is_active } = req.body;
-
-    if (is_active !== 0 && is_active !== 1) {
-      return res.status(400).json({ error: 'is_active must be 0 (deactivated) or 1 (active)' });
+    users.checkCanManage(existing, req.user);
+    const { pin, password, ...profile } = req.body || {};
+    const out = users.validateUserInput(profile, { actor: req.user, existing });
+    const changed = Object.keys(out).filter((k) => out[k] !== existing[k]);
+    if (changed.length) {
+      transaction(() => {
+        users.updateUserRow(existing.id, Object.fromEntries(changed.map((k) => [k, out[k]])));
+        audit(req, 'USER_UPDATE', existing.id,
+          Object.fromEntries(changed.map((k) => [k, existing[k]])),
+          Object.fromEntries(changed.map((k) => [k, out[k]])));
+      });
     }
-
-    const user = await get("SELECT id, username, full_name, role, is_active FROM users WHERE id = ?", [userId]);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    if (user.id === req.user.id) {
-      return res.status(400).json({ error: 'You cannot change your own active status' });
-    }
-
-    const oldStatus = user.is_active;
-
-    await run(
-      "UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [is_active, userId]
-    );
-
-    const updatedUser = await get(
-      "SELECT id, username, full_name, role, is_active, updated_at FROM users WHERE id = ?",
-      [userId]
-    );
-
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: 'USER_TOGGLE',
-      entityType: 'user',
-      entityId: userId,
-      oldValue: { is_active: oldStatus },
-      newValue: { is_active: is_active }
-    });
-
-    return res.json(updatedUser);
+    return res.json(publicUser(users.getUser(existing.id)));
   } catch (err) {
-    console.error('Toggle User Status Error:', err);
-    return res.status(500).json({ error: 'Failed to update user status' });
+    return sendError(res, err);
   }
 });
 
-// PATCH /api/users/:id/password - Admin Reset Employee Password
+// PATCH /api/users/:id/status - activate / deactivate
+router.patch('/:id/status', (req, res) => {
+  const target = findUser(req, res);
+  if (!target) return;
+  const { is_active } = req.body || {};
+  if (is_active !== 0 && is_active !== 1 && is_active !== true && is_active !== false) {
+    return res.status(400).json({ error: 'is_active must be 0 (deactivated) or 1 (active)' });
+  }
+  const next = is_active ? 1 : 0;
+  try {
+    users.checkStatusChange(target, next, req.user);
+    transaction(() => {
+      users.updateUserRow(target.id, { is_active: next });
+      audit(req, 'USER_TOGGLE', target.id, { is_active: target.is_active }, { is_active: next });
+    });
+    return res.json(publicUser(users.getUser(target.id)));
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// PATCH /api/users/:id/password - reset someone's password
 router.patch('/:id/password', async (req, res) => {
+  const target = findUser(req, res);
+  if (!target) return;
   try {
-    const userId = parseInt(req.params.id, 10);
-    const { new_password } = req.body;
-
-    if (!new_password || new_password.trim().length < 4) {
-      return res.status(400).json({ error: 'New password must be at least 4 characters long' });
-    }
-
-    const user = await get("SELECT id, username, full_name, role FROM users WHERE id = ?", [userId]);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const password_hash = await bcrypt.hash(new_password.trim(), 10);
-
-    await run(
-      "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [password_hash, userId]
-    );
-
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: 'USER_PASSWORD_RESET',
-      entityType: 'user',
-      entityId: userId,
-      newValue: { username: user.username, role: user.role }
+    users.checkCanManage(target, req.user);
+    const errors = {};
+    users.checkPassword(req.body && req.body.new_password, errors, 'new_password');
+    if (Object.keys(errors).length) throw new users.UserError(errors);
+    const hash = await bcrypt.hash(req.body.new_password, 10);
+    transaction(() => {
+      users.updateUserRow(target.id, { password_hash: hash });
+      audit(req, 'USER_PASSWORD_RESET', target.id, null, { username: target.username });
     });
-
-    return res.json({ message: `Password for ${user.username} successfully updated` });
+    return res.json({ message: `Password for ${target.username} successfully updated` });
   } catch (err) {
-    console.error('Password Reset Error:', err);
-    return res.status(500).json({ error: 'Failed to reset password' });
+    return sendError(res, err);
   }
 });
 
-// PUT /api/users/:id - Admin Update Staff (Username, Full Name, Role)
-router.put('/:id', async (req, res) => {
+// PUT /api/users/:id/pin - set ({ pin: "1234" }) or clear ({ pin: null }) someone's quick-switch PIN
+router.put('/:id/pin', async (req, res) => {
+  const target = findUser(req, res);
+  if (!target) return;
   try {
-    const userId = parseInt(req.params.id, 10);
-    const { username, full_name, role } = req.body;
-
-    if (!username || !full_name) {
-      return res.status(400).json({ error: 'Username and Full Name are required' });
-    }
-
-    if (role && !['ADMIN', 'CASHIER'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role. Allowed: ADMIN, CASHIER' });
-    }
-
-    const existingUser = await get("SELECT id, username, full_name, role, is_active FROM users WHERE id = ?", [userId]);
-    if (!existingUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Check username collision with other users
-    const duplicate = await get("SELECT id FROM users WHERE username = ? AND id != ?", [username.trim(), userId]);
-    if (duplicate) {
-      return res.status(400).json({ error: 'Username already taken by another account' });
-    }
-
-    const updatedRole = role || existingUser.role;
-
-    await run(
-      "UPDATE users SET username = ?, full_name = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [username.trim(), full_name.trim(), updatedRole, userId]
-    );
-
-    const updatedUser = await get(
-      "SELECT id, username, full_name, role, is_active, updated_at FROM users WHERE id = ?",
-      [userId]
-    );
-
-    await logAudit({
-      userId: req.user.id,
-      userName: req.user.username,
-      action: 'USER_UPDATE',
-      entityType: 'user',
-      entityId: userId,
-      oldValue: { username: existingUser.username, full_name: existingUser.full_name, role: existingUser.role },
-      newValue: { username: updatedUser.username, full_name: updatedUser.full_name, role: updatedUser.role }
+    users.checkCanManage(target, req.user);
+    const pin = req.body ? req.body.pin : undefined;
+    if (pin !== null && !users.PIN_PATTERN.test(String(pin))) throw new users.UserError({ pin: 'PIN must be 4 to 6 digits' });
+    const hash = pin === null ? null : await bcrypt.hash(String(pin), 10);
+    transaction(() => {
+      users.updateUserRow(target.id, { pin_hash: hash });
+      audit(req, pin === null ? 'USER_PIN_CLEAR' : 'USER_PIN_SET', target.id, null, { username: target.username });
     });
-
-    return res.json(updatedUser);
+    return res.json(publicUser(users.getUser(target.id)));
   } catch (err) {
-    console.error('Update User Error:', err);
-    return res.status(500).json({ error: 'Failed to update user profile' });
+    return sendError(res, err);
   }
 });
 

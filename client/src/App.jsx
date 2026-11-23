@@ -13,7 +13,7 @@ import { InvoicesView } from './views/InvoicesView';
 import { PRODUCT_NAME } from './config/brand';
 
 function MainApp() {
-  const { user, loading } = useAuth();
+  const { user, loading, can } = useAuth();
   const [activeTab, setActiveTab] = useState('billing');
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
@@ -33,27 +33,28 @@ function MainApp() {
     return <LoginView />;
   }
 
-  const isAdmin = user.role === 'ADMIN';
+  // Each screen and the permission needed to open it (must match MainLayout's menu)
+  const billing = <BillingView searchQuery={searchQuery} setSearchQuery={setSearchQuery} searchInputRef={searchInputRef} />;
+  const screens = {
+    billing: { permission: 'billing.create', view: billing },
+    invoices: { permission: 'orders.view', view: <InvoicesView /> },
+    customers: { permission: 'customers.view', view: <CustomersView /> },
+    items: { permission: 'items.manage', view: <ItemManagerView /> },
+    users: { permission: 'users.manage', view: <UserManagerView /> },
+    audit: { permission: 'audit.view', view: <AuditLogView /> },
+    reports: { permission: 'reports.view', view: <EODReportView /> }
+  };
 
   const renderContent = () => {
-    switch (activeTab) {
-      case 'billing':
-        return <BillingView searchQuery={searchQuery} setSearchQuery={setSearchQuery} searchInputRef={searchInputRef} />;
-      case 'invoices':
-        return <InvoicesView />;
-      case 'customers':
-        return <CustomersView />;
-      case 'items':
-        return isAdmin ? <ItemManagerView /> : <BillingView searchQuery={searchQuery} setSearchQuery={setSearchQuery} searchInputRef={searchInputRef} />;
-      case 'users':
-        return isAdmin ? <UserManagerView /> : <BillingView searchQuery={searchQuery} setSearchQuery={setSearchQuery} searchInputRef={searchInputRef} />;
-      case 'audit':
-        return isAdmin ? <AuditLogView /> : <BillingView searchQuery={searchQuery} setSearchQuery={setSearchQuery} searchInputRef={searchInputRef} />;
-      case 'reports':
-        return isAdmin ? <EODReportView /> : <BillingView searchQuery={searchQuery} setSearchQuery={setSearchQuery} searchInputRef={searchInputRef} />;
-      default:
-        return <BillingView searchQuery={searchQuery} setSearchQuery={setSearchQuery} searchInputRef={searchInputRef} />;
-    }
+    const screen = screens[activeTab];
+    if (screen && can(screen.permission)) return screen.view;
+    // Fall back to the first screen this user may open
+    const first = Object.values(screens).find((s) => can(s.permission));
+    return first ? first.view : (
+      <div className="p-10 text-center text-sm font-semibold text-slate-500">
+        Your role has no screens enabled. Ask the shop owner to update your permissions.
+      </div>
+    );
   };
 
   return (

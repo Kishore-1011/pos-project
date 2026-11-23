@@ -3,10 +3,9 @@ const { all, get, runSync, transaction } = require('../db/database');
 const numberSeries = require('../services/numberSeriesService');
 const calendar = require('../services/calendar');
 const { orderColumns, orderItemColumns } = require('../db/columns');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const { logAudit, logAuditSync } = require('../services/auditService');
 const { toPaise, fromPaise } = require('../utils/money');
-const { getSetting } = require('../services/settingsService');
 
 const MAX_ORDER_LINES = 200;
 const MAX_LINE_QUANTITY = 10000;
@@ -17,7 +16,7 @@ router.use(authenticateToken);
 
 
 // POST /api/orders - Create New Bill
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('billing.create'), async (req, res) => {
   try {
     const { items, discount = 0, payment_method = 'CASH', cash_received = 0, notes = '', metadata = null, customer_id = null } = req.body || {};
 
@@ -97,13 +96,19 @@ router.post('/', async (req, res) => {
     if (discountPaise > subtotalPaise) {
       return res.status(400).json({ error: 'Discount cannot be more than the bill subtotal' });
     }
-    if (req.user.role !== 'ADMIN' && discountPaise > 0) {
-      const maxPct = await getSetting('cashier_max_discount_pct');
-      const maxDiscountPaise = Math.floor((subtotalPaise * maxPct) / 100);
-      if (discountPaise > maxDiscountPaise) {
-        return res.status(403).json({
-          error: `Cashiers can give at most ${maxPct}% discount (₹${fromPaise(maxDiscountPaise).toFixed(2)} on this bill). Ask an admin.`
-        });
+    if (discountPaise > 0) {
+      if (!req.can('billing.discount')) {
+        return res.status(403).json({ error: 'You do not have permission to give discounts' });
+      }
+      // Role's discount limit (null = no limit, e.g. Owner)
+      const maxPct = req.user.max_discount_pct;
+      if (maxPct !== null && maxPct !== undefined) {
+        const maxDiscountPaise = Math.floor((subtotalPaise * maxPct) / 100);
+        if (discountPaise > maxDiscountPaise) {
+          return res.status(403).json({
+            error: `${req.user.role_name || 'Your role'} can give at most ${maxPct}% discount (₹${fromPaise(maxDiscountPaise).toFixed(2)} on this bill). Ask a manager.`
+          });
+        }
       }
     }
 
@@ -202,7 +207,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET /api/orders - Filter, search, and paginate past orders
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('orders.view'), async (req, res) => {
   try {
     const { 
       status, 
@@ -343,7 +348,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/orders/:id - Single order detail with items
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('orders.view'), async (req, res) => {
   try {
     const orderId = parseInt(req.params.id, 10);
     const order = await get(
@@ -369,7 +374,8 @@ router.get('/:id', async (req, res) => {
 });
 
 // PATCH /api/orders/:id/status - Admin Only (Void order / update status)
-router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
+// Voiding needs orders.void; restoring a voided bill needs orders.unvoid (checked below).
+router.patch('/:id/status', requirePermission('orders.void', 'orders.unvoid'), async (req, res) => {
   try {
     const orderId = parseInt(req.params.id, 10);
     const { status } = req.body || {};
@@ -392,6 +398,10 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
 
     const isVoiding = status === 'VOID';
     const isUnvoiding = oldOrder.payment_status === 'VOID';
+    const needed = isUnvoiding ? 'orders.unvoid' : 'orders.void';
+    if (!req.can(needed)) {
+      return res.status(403).json({ error: 'You do not have permission to do this', required: [needed] });
+    }
     if ((isVoiding || isUnvoiding) && reason.length < 3) {
       return res.status(400).json({
         error: isVoiding ? 'A reason is required to void a bill' : 'A reason is required to restore a voided bill'

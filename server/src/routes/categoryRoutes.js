@@ -1,6 +1,6 @@
 const express = require('express');
 const { all, get, run } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const { logAudit } = require('../services/auditService');
 
 const router = express.Router();
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/categories - Admin Only
-router.post('/', requireRole('ADMIN'), async (req, res) => {
+router.post('/', requirePermission('items.manage'), async (req, res) => {
   try {
     const { name } = req.body;
 
@@ -80,7 +80,7 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
 });
 
 // PUT /api/categories/:id - Admin Only (Rename)
-router.put('/:id', requireRole('ADMIN'), async (req, res) => {
+router.put('/:id', requirePermission('items.manage'), async (req, res) => {
   try {
     const categoryId = parseInt(req.params.id, 10);
     const { name } = req.body;
@@ -127,7 +127,7 @@ router.put('/:id', requireRole('ADMIN'), async (req, res) => {
 });
 
 // PATCH /api/categories/:id/status - Admin Only (Toggle Active/Deactivate)
-router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
+router.patch('/:id/status', requirePermission('items.manage'), async (req, res) => {
   try {
     const categoryId = parseInt(req.params.id, 10);
     const { is_active } = req.body;
@@ -164,7 +164,7 @@ router.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
 });
 
 // DELETE /api/categories/:id - Admin Only (Checks for assigned items)
-router.delete('/:id', requireRole('ADMIN'), async (req, res) => {
+router.delete('/:id', requirePermission('items.manage'), async (req, res) => {
   try {
     const categoryId = parseInt(req.params.id, 10);
 

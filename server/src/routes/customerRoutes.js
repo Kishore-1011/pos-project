@@ -1,6 +1,6 @@
 const express = require('express');
 const { all, get, run, runSync, transaction } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 const { logAudit, logAuditSync } = require('../services/auditService');
 const numberSeries = require('../services/numberSeriesService');
 const { orderColumns } = require('../db/columns');
@@ -11,7 +11,7 @@ router.use(authenticateToken);
 
 
 // GET /api/customers - Search / Autocomplete & Reporting List
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('customers.view'), async (req, res) => {
   try {
     const { search, limit = 50, sortBy = 'spend', order = 'DESC', withStats = 'true' } = req.query;
     const cleanSearch = (search || '').trim();
@@ -121,7 +121,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/customers/:id - Single customer with past order history
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('customers.view'), async (req, res) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     const customer = await get(
@@ -165,7 +165,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/customers - Register New Customer (Auto generates CUST-XXXX)
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('customers.manage'), async (req, res) => {
   try {
     const { name, phone } = req.body;
 
@@ -218,7 +218,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/customers/:id - Update Customer Details
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('customers.manage'), async (req, res) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     const { name, phone } = req.body;
@@ -264,7 +264,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // PATCH /api/customers/:id/status - Toggle active/disabled status
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requirePermission('customers.manage'), async (req, res) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     const { is_active } = req.body;
@@ -297,7 +297,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // DELETE /api/customers/:id - Admin Only
-router.delete('/:id', requireRole('ADMIN'), async (req, res) => {
+router.delete('/:id', requirePermission('customers.delete'), async (req, res) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     const customer = await get("SELECT * FROM customers WHERE id = ?", [customerId]);

@@ -1,11 +1,11 @@
 const express = require('express');
 const { all } = require('../db/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
 router.use(authenticateToken);
-router.use(requireRole('ADMIN'));
+router.use(requirePermission('audit.view'));
 
 // GET /api/audit-logs
 router.get('/', async (req, res) => {
