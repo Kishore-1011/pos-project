@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
-  ShoppingCart, FileText, Package, Users, ClipboardList, BarChart3, LogOut, UserCheck, Repeat, CalendarDays, Settings
+  ShoppingCart, FileText, Package, BarChart3, LogOut, UserCheck, Repeat, CalendarDays, Settings
 } from 'lucide-react';
 import { PRODUCT_NAME, PRODUCT_SHORT } from '../config/brand';
 import { businessDateString } from '../utils/datetime';
@@ -15,9 +15,8 @@ const NAV_ITEMS = [
   { id: 'customers', label: 'Customers', icon: UserCheck, permissions: ['customers.view'] },
   { id: 'items', label: 'Items', icon: Package, permissions: ['items.manage'] },
   { id: 'reports', label: 'Reports', icon: BarChart3, permissions: ['reports.view'] },
-  { id: 'users', label: 'Staff', icon: Users, permissions: ['users.manage'] },
-  { id: 'audit', label: 'Audit log', icon: ClipboardList, permissions: ['audit.view'] },
-  { id: 'settings', label: 'Settings', icon: Settings, permissions: ['settings.manage', 'users.manage'] }
+  // Staff and Audit log live inside Settings
+  { id: 'settings', label: 'Settings', icon: Settings, permissions: ['settings.manage', 'users.manage', 'audit.view'] }
 ];
 
 const initials = (name = '') => name.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();

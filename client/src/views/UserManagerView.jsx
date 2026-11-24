@@ -4,7 +4,7 @@ import {
   useToast, useDialogs, Button, Badge, Card, PageHeader, TextInput, Select, Modal, EmptyState
 } from '../components/ui';
 import { formatDate, formatDateTime } from '../utils/format';
-import { UserPlus, Users, KeyRound, Edit2, UserCog, Phone, Mail, Hash, Lock, UserX, UserCheck } from 'lucide-react';
+import { UserPlus, Users, KeyRound, Edit2, UserCog, Phone, Mail, Hash, Lock, UserX, UserCheck, MoreHorizontal } from 'lucide-react';
 
 const ROLE_OPTIONS = [
   { value: 'CASHIER', label: 'Cashier: billing at the counter' },
@@ -22,6 +22,18 @@ export function UserManagerView() {
   const dialogs = useDialogs();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Row "more actions" menu (one open at a time); closes on outside click or Escape
+  const [menuFor, setMenuFor] = useState(null);
+  useEffect(() => {
+    if (menuFor === null) return undefined;
+    const onScroll = () => setMenuFor(null);
+    window.addEventListener('scroll', onScroll, true);
+    const close = (e) => { if (e.type === 'keydown' ? e.key === 'Escape' : !e.target.closest('[role="menu"],[aria-haspopup="menu"]')) setMenuFor(null); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => { window.removeEventListener('scroll', onScroll, true); document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+  }, [menuFor]);
 
   // Create / edit (one form)
   const [formOpen, setFormOpen] = useState(false);
@@ -255,7 +267,6 @@ export function UserManagerView() {
                 <tr>
                   <th className="px-5 py-3">Person</th>
                   <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3">Quick PIN</th>
                   <th className="px-4 py-3">Last login</th>
                   <th className="px-4 py-3">Status</th>
@@ -280,15 +291,16 @@ export function UserManagerView() {
                               {isSelf && <Badge tone="brand">You</Badge>}
                             </p>
                             <p className="text-xs text-ink-muted">@{u.username}</p>
+                            {/* Contact shown under the name to keep the table narrow */}
+                            {(u.phone || u.email) && (
+                              <p className="text-xs text-ink-muted flex items-center gap-1.5 mt-0.5 truncate">
+                                {u.phone ? <><Phone className="w-3 h-3 flex-shrink-0" aria-hidden="true" />{u.phone}</> : <><Mail className="w-3 h-3 flex-shrink-0" aria-hidden="true" />{u.email}</>}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3"><Badge tone={ROLE_TONE[u.role] || 'neutral'}>{u.role_name || u.role}</Badge></td>
-                      <td className="px-4 py-3 text-xs text-ink-muted">
-                        {u.phone ? <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" aria-hidden="true" />{u.phone}</p> : null}
-                        {u.email ? <p className="flex items-center gap-1.5 mt-0.5"><Mail className="w-3.5 h-3.5" aria-hidden="true" />{u.email}</p> : null}
-                        {!u.phone && !u.email && <span className="text-ink-subtle">—</span>}
-                      </td>
                       <td className="px-4 py-3">
                         {hasPin ? <Badge tone="success"><Hash className="w-3 h-3" aria-hidden="true" />PIN set</Badge> : <span className="text-xs text-ink-subtle">No PIN</span>}
                       </td>
@@ -303,16 +315,39 @@ export function UserManagerView() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1 flex-wrap">
+                        <div className="flex items-center justify-end gap-1">
                           <Button size="sm" variant="secondary" icon={Edit2} onClick={() => openEdit(u)}>Edit</Button>
-                          <Button size="sm" variant="ghost" icon={Hash} onClick={() => handleSetPin(u)}>{hasPin ? 'Change PIN' : 'Set PIN'}</Button>
-                          {hasPin && <Button size="sm" variant="ghost" onClick={() => handleClearPin(u)}>Clear PIN</Button>}
-                          <Button size="sm" variant="ghost" icon={KeyRound}
-                            onClick={() => { setResetUser(u); setNewPassword(''); setResetError(''); }}>Password</Button>
-                          {!isSelf && (
-                            isActive
-                              ? <Button size="sm" variant="danger-quiet" onClick={() => handleToggleStatus(u)}>Deactivate</Button>
-                              : <Button size="sm" variant="ghost" onClick={() => handleToggleStatus(u)}>Reactivate</Button>
+                          {/* Less frequent actions in a compact menu so the table fits inside Settings */}
+                          <Button size="sm" variant="ghost" aria-label={`More actions for ${u.full_name}`} aria-haspopup="menu"
+                            aria-expanded={menuFor?.id === u.id}
+                            onClick={(e) => {
+                              if (menuFor?.id === u.id) { setMenuFor(null); return; }
+                              const r = e.currentTarget.getBoundingClientRect();
+                              const openUp = window.innerHeight - r.bottom < 200;
+                              setMenuFor({ id: u.id, right: window.innerWidth - r.right, top: openUp ? undefined : r.bottom + 4, bottom: openUp ? window.innerHeight - r.top + 4 : undefined });
+                            }}>
+                            <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
+                          </Button>
+                          {menuFor?.id === u.id && (
+                            // Fixed to the viewport so the table's scroll container can't clip it
+                            <div role="menu" style={{ right: menuFor.right, top: menuFor.top, bottom: menuFor.bottom }}
+                              className="fixed z-50 w-44 bg-surface border border-line rounded-xl shadow-lg py-1">
+                              {[
+                                { label: hasPin ? 'Change PIN' : 'Set PIN', icon: Hash, run: () => handleSetPin(u) },
+                                hasPin && { label: 'Clear PIN', run: () => handleClearPin(u) },
+                                { label: 'Reset password', icon: KeyRound, run: () => { setResetUser(u); setNewPassword(''); setResetError(''); } },
+                                !isSelf && (isActive
+                                  ? { label: 'Deactivate', danger: true, run: () => handleToggleStatus(u) }
+                                  : { label: 'Reactivate', run: () => handleToggleStatus(u) })
+                              ].filter(Boolean).map((a) => (
+                                <button key={a.label} type="button" role="menuitem"
+                                  onClick={() => { setMenuFor(null); a.run(); }}
+                                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 cursor-pointer ${a.danger ? 'text-rose-600' : 'text-ink'}`}>
+                                  {a.icon ? <a.icon className="w-4 h-4 text-ink-subtle" aria-hidden="true" /> : <span className="w-4" />}
+                                  {a.label}
+                                </button>
+                              ))}
+                            </div>
                           )}
                         </div>
                       </td>

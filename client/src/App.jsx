@@ -5,8 +5,6 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginView } from './views/LoginView';
 import { BillingView } from './views/BillingView';
 import { ItemManagerView } from './views/ItemManagerView';
-import { UserManagerView } from './views/UserManagerView';
-import { AuditLogView } from './views/AuditLogView';
 import { EODReportView } from './views/EODReportView';
 import { CustomersView } from './views/CustomersView';
 import { InvoicesView } from './views/InvoicesView';
@@ -68,10 +66,9 @@ function MainApp() {
     invoices: { permissions: ['orders.view'], view: <InvoicesView /> },
     customers: { permissions: ['customers.view'], view: <CustomersView /> },
     items: { permissions: ['items.manage'], view: <ItemManagerView /> },
-    users: { permissions: ['users.manage'], view: <UserManagerView /> },
-    audit: { permissions: ['audit.view'], view: <AuditLogView /> },
     reports: { permissions: ['reports.view'], view: <EODReportView /> },
-    settings: { permissions: ['settings.manage', 'users.manage'], view: <SettingsView /> }
+    // Staff and Audit log are sections inside Settings
+    settings: { permissions: ['settings.manage', 'users.manage', 'audit.view'], view: <SettingsView /> }
   };
 
   const renderContent = () => {

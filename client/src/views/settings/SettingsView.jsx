@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Building2, BadgeCheck, Hash, Globe2, Receipt, ShieldCheck, Settings } from 'lucide-react';
+import { Building2, BadgeCheck, Hash, Globe2, Receipt, ShieldCheck, Settings, Users, ClipboardList } from 'lucide-react';
+import { UserManagerView } from '../UserManagerView';
+import { AuditLogView } from '../AuditLogView';
 import { useAuth } from '../../context/AuthContext';
 import { useDialogs, EmptyState } from '../../components/ui';
 import { OrganizationSection } from './OrganizationSection';
@@ -15,7 +17,9 @@ const SECTIONS = [
   { id: 'series', title: 'Bill numbers', hint: 'Invoice and customer series', icon: Hash, permission: 'settings.manage', Component: NumberSeriesSection },
   { id: 'region', title: 'Region & year', hint: 'Time zone, financial year', icon: Globe2, permission: 'settings.manage', Component: RegionSection },
   { id: 'receipt', title: 'Receipt', hint: 'Paper size, footer, details', icon: Receipt, permission: 'settings.manage', Component: ReceiptSection },
-  { id: 'roles', title: 'Roles & permissions', hint: 'Who can do what', icon: ShieldCheck, permission: 'users.manage', Component: RolesSection }
+  { id: 'staff', title: 'Staff', hint: 'Accounts, PINs, access', icon: Users, permission: 'users.manage', Component: UserManagerView, page: true },
+  { id: 'roles', title: 'Roles & permissions', hint: 'Who can do what', icon: ShieldCheck, permission: 'users.manage', Component: RolesSection },
+  { id: 'audit', title: 'Audit log', hint: 'Every change, who and when', icon: ClipboardList, permission: 'audit.view', Component: AuditLogView, page: true }
 ];
 
 /** Shop settings: section list on the left, the chosen section's form on the right. */
@@ -54,7 +58,7 @@ export function SettingsView() {
       <div className="flex items-end justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-ink tracking-tight">Settings</h1>
-          <p className="text-sm text-ink-muted">How your shop appears on bills, and how the counter works.</p>
+          <p className="text-sm text-ink-muted">Your shop's details, bills, staff and the record of changes.</p>
         </div>
       </div>
 
@@ -85,8 +89,15 @@ export function SettingsView() {
           })}
         </nav>
 
-        <div className="min-h-0">
-          <Active key={active.id} onDirtyChange={setDirty} />
+        <div className="min-h-0 min-w-0">
+          {active.page ? (
+            // Full screens (Staff, Audit log) shown inside Settings in their own scrolling panel
+            <div className="h-full min-w-0 overflow-y-auto overflow-x-hidden bg-surface border border-line rounded-2xl shadow-sm [&>div]:!px-6 [&>div]:!py-5">
+              <Active key={active.id} />
+            </div>
+          ) : (
+            <Active key={active.id} onDirtyChange={setDirty} />
+          )}
         </div>
       </div>
     </div>
