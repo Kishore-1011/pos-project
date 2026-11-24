@@ -5,8 +5,11 @@ import * as billingMath from '../utils/billing';
 import { formatInvoiceFallback } from '../config/brand';
 import { formatMoney } from '../utils/format';
 import { Badge, Button, TextInput, MoneyInput, EmptyState, useToast } from '../components/ui';
+import { ItemArt } from '../components/ItemArt';
+import { getCachedReceiptProfile, loadReceiptProfile } from './settings/receiptProfile';
+import { itemTileStyle } from '../utils/itemStyle';
 import {
-  Plus, Minus, Trash2, Printer, CheckCircle2, X, AlertCircle, Save, RotateCcw, CreditCard, Banknote, Users, Phone, UserCheck, Check, Smartphone, ShoppingCart, Search
+  Plus, Minus, Trash2, Printer, CheckCircle2, X, AlertCircle, Save, RotateCcw, CreditCard, Banknote, Users, Phone, UserCheck, Check, Smartphone, ShoppingCart, Search, LayoutGrid
 } from 'lucide-react';
 
 export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
@@ -62,7 +65,11 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
   const [showNewOrderGuard, setShowNewOrderGuard] = useState(false);
 
   // Thermal Receipt Modal State
-  const [rollSize, setRollSize] = useState('58mm');
+  // Paper width starts from the shop's Receipt setting; the 58/80 switch in the preview overrides it for one print
+  const [rollSize, setRollSize] = useState(() => getCachedReceiptProfile()?.settings?.receipt_width || '58mm');
+  useEffect(() => {
+    loadReceiptProfile(authFetch).then((p) => { if (p?.settings?.receipt_width) setRollSize(p.settings.receipt_width); });
+  }, []);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   // Auto-dismiss (strictly 1s / 1000ms) and click-away listener for Success Toast
@@ -530,7 +537,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                 type="search"
                 value={searchQuery || ''}
                 onChange={(e) => setSearchQuery && setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery && setSearchQuery(''); }}
+                onKeyDown={(e) => { if (e.key === 'Escape' && setSearchQuery) setSearchQuery(''); }}
                 placeholder="Search items"
                 aria-label="Search items"
                 className="w-full h-10 bg-surface border border-slate-300 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 rounded-xl pl-9 pr-10 text-sm text-ink placeholder:text-ink-subtle outline-none"
@@ -544,6 +551,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                 ...categories.map((cat) => ({ id: String(cat.id), name: cat.name, count: items.filter((i) => i.category_id === cat.id).length }))
               ].map((cat) => {
                 const isSelected = selectedCategory === cat.id;
+                const CatIcon = cat.id === 'ALL' ? LayoutGrid : itemTileStyle({ category_name: cat.name }).Icon;
                 return (
                   <button
                     key={cat.id}
@@ -557,6 +565,7 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                         : 'bg-surface border-line text-ink-muted hover:border-brand-500 hover:text-ink'
                     }`}
                   >
+                    <CatIcon className="w-4 h-4" aria-hidden="true" />
                     {cat.name}
                     <span className={`text-xs tabular-nums ${isSelected ? 'text-white/80' : 'text-ink-subtle'}`}>{cat.count}</span>
                   </button>
@@ -586,8 +595,8 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                   const inCartItem = cart.find(c => c.id === item.id);
                   const imgPath = formatImageUrl(item.image_url);
 
-                  // Compact card (UI review H1): photo strip only when the item has a photo; no repeated
-                  // name in a grey placeholder, no "READY" tag. More items fit on a laptop screen.
+                  // Photo-first tile: the photo (or a designed category tile when there is none),
+                  // "+" that turns into the quantity once the item is in the bill, then name and price.
                   return (
                     <button
                       type="button"
@@ -595,33 +604,29 @@ export function BillingView({ searchQuery, setSearchQuery, searchInputRef }) {
                       onClick={() => addToCart(item)}
                       disabled={!!savedOrder}
                       aria-label={`${item.name}, ${formatMoney(item.price)}${inCartItem ? `, ${inCartItem.quantity} in bill` : ''}`}
-                      className={`group relative rounded-xl border overflow-hidden transition-colors flex flex-col bg-surface text-left h-fit ${
-                        savedOrder ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-brand-500 hover:shadow-sm'
-                      } ${inCartItem ? 'border-brand-600 ring-1 ring-brand-600' : 'border-line'}`}
+                      className={`group relative rounded-2xl border overflow-hidden transition-all duration-200 flex flex-col bg-surface text-left h-fit ${
+                        savedOrder ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-brand-500 hover:shadow-md hover:-translate-y-0.5'
+                      } ${inCartItem ? 'border-brand-600 ring-2 ring-brand-600 shadow-md' : 'border-line'}`}
                     >
-                      {imgPath && (
-                        <div className="w-full h-20 bg-slate-100 overflow-hidden">
-                          <img
-                            src={imgPath}
-                            alt=""
-                            className="w-full h-full object-cover"
-                            onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
-                          />
-                        </div>
-                      )}
+                      <ItemArt item={item} src={imgPath} className="w-full h-28" />
 
-                      {inCartItem && (
-                        <span className="absolute top-1.5 right-1.5 min-w-6 h-6 px-1.5 rounded-full bg-brand-600 text-white text-xs font-bold tabular-nums flex items-center justify-center shadow-sm" aria-hidden="true">
-                          {inCartItem.quantity}
-                        </span>
-                      )}
+                      <span
+                        className={`absolute top-2 right-2 min-w-7 h-7 px-1.5 rounded-xl flex items-center justify-center text-xs font-bold tabular-nums shadow-sm transition-colors ${
+                          inCartItem ? 'bg-brand-600 text-white' : 'bg-white/90 text-ink group-hover:bg-brand-600 group-hover:text-white'
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {inCartItem ? inCartItem.quantity : <Plus className="w-3.5 h-3.5" />}
+                      </span>
 
-                      <div className="p-3 flex flex-col gap-1 w-full">
-                        <span className={`text-sm font-semibold text-ink leading-snug line-clamp-2 ${inCartItem ? 'pr-7' : ''} group-hover:text-brand-700`}>
+                      <div className="p-3 w-full">
+                        <span className="block text-sm font-bold text-ink leading-snug truncate group-hover:text-brand-700 transition-colors">
                           {item.name}
                         </span>
-                        <span className="text-xs text-ink-subtle truncate">{item.category_name || 'Uncategorised'}</span>
-                        <span className="text-sm font-bold text-brand-700 tabular-nums">{formatMoney(item.price)}</span>
+                        <span className="block text-xs text-ink-subtle truncate mt-0.5">{item.category_name || 'Uncategorised'}</span>
+                        <span className="block mt-2 pt-2 border-t border-slate-100 text-sm font-extrabold text-brand-700 tabular-nums">
+                          {formatMoney(item.price)}
+                        </span>
                       </div>
                     </button>
                   );

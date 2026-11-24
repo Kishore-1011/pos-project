@@ -8,7 +8,7 @@ Bug details are in [PRODUCT_ANALYSIS.md](PRODUCT_ANALYSIS.md).
 |---|---|---|---|
 | 0 | Safety & correct billing | ~1 wk | Done (2026-11-23) |
 | 1 | Foundation: DB, series, FY/time zone, roles & permissions | ~3 wk | Done (2026-11-23), CI green |
-| 2 | Setup wizard & Settings screens | ~1.5 wk | |
+| 2 | Setup wizard & Settings screens | ~1.5 wk | Done (2026-11-24) |
 | 3 | Catalog for food, retail & services | ~2 wk | |
 | 4 | Billing upgrades | ~2 wk | |
 | 5 | Printing & hardware | ~1 wk | |
@@ -163,8 +163,14 @@ Phase 2 adds about 8 new settings screens, so the shared building blocks come fi
 - [x] All browser pop-ups replaced (2026-11-23): 34 `alert`s → toasts (top-right, clear of Billing's pay buttons), 2 `confirm`s → in-app confirm dialogs (deactivate staff, delete customer), 1 `prompt` → in-app void dialog with a required reason (min 3 characters). CSV export now returns false instead of a pop-up, and neutralises formula injection (`=`, `+`, `@`, `-text` prefixed with `'`), with tests.
 - [x] Billing left side (2026-11-23): item search moved from the top bar into Billing; categories as one row of chips (was two rows of large cards; also fixes "6 Available" for 5 categories); compact item cards (photo strip only when there is a photo, no repeated name, no "READY" tag): all 17 demo items fit at 1366×768 (8 before).
 - Verified in headless Edge at 1366×768: 24 checks passing (shell, dialogs, Esc, switch user, cashier menu, billing fit, no browser pop-ups, no page errors).
-- [ ] Shared formatters across all other screens (dates, money); invoice column width; readable audit log; wording by business type
-- [ ] Settings layout (for Phase 2)
+- [x] Course correction (2026-11-23): owner feedback that UI-1 looked like a generic SaaS. Icon rail with hover labels restored; photo-first item tiles restored, with designed category tiles (colour + icon) for items without photos (`components/ItemArt.jsx`, `utils/itemStyle.js`); category chips with icons. See [DIFFERENTIATION_STUDY.md](DIFFERENTIATION_STUDY.md). Counter concept prototype (live receipt, PAID stamp, sealed bills, Books verified, UPI QR, dark/light rail, offline status) in `docs/prototypes/counter-concept.html`, **awaiting owner review before it goes into the app**.
+- [x] Remaining screens (2026-11-24): shared money/date formats on Invoices, Customers, Reports; invoice numbers never wrap; Items with photo thumbnails and the "Allow price change at billing" switch; Categories with inline rename; Staff with phone, PIN set/clear, last login; readable audit log (36 actions as sentences, JSON behind Details); quiet destructive actions; clearer wording.
+- [x] Settings layout and screens (Phase 2, 2026-11-24).
+
+## Phase 2 result (2026-11-24)
+- **Server:** receipt settings (`receipt_width`, `receipt_footer`, `receipt_show_gstin`, `receipt_show_licences`, `receipt_show_customer`); migration `009_setup_state` (shops with bills are marked set up); `GET /api/setup/status`, `POST /api/setup/complete` (validates every section first, then saves in one transaction; turns the seeded `admin` into the owner, so `admin123` stops working; signs the owner in; 409 once done).
+- **Client:** first-run **Setup wizard** (Business → Address → Tax & licences → Bill numbers → Owner → Review); **Settings** (rail icon, for settings/users managers): Business (incl. logo), Tax & licences, Bill numbers (live preview), Region & year, Receipt (live preview), Roles & permissions grid; receipt prints the shop's own header, GSTIN/licences, "Tax Invoice"/"Bill of Supply" and footer, with the saved paper width.
+- **Verified:** 107 tests (97 server, 10 client), lint clean, build OK; headless Edge at 1366×768: fresh install → wizard → owner signed in, `admin123` refused, new password and PIN work, setup can't run twice; demo shop skips the wizard; all screens and all six Settings sections open; no browser pop-ups or page errors.
 
 ### UI-2: Billing screen redesign (with Phase 4)
 - Search-first layout: item search or barcode field always focused; results by name, code or barcode.

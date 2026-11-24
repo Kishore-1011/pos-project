@@ -93,25 +93,25 @@ test('FY start month is locked once billing has started', async () => {
 });
 
 test('business-day cutoff: a 01:30 bill counts in the previous day', async () => {
-  billAt('2026-11-24T20:00:00.000Z'); // 01:30 IST on 25 Nov
+  billAt('2031-11-24T20:00:00.000Z'); // 01:30 IST on 25 Nov (year far from today, so no real bills collide)
 
   // Midnight cutoff: it belongs to 25 Nov
-  assert.equal((await eod('2026-11-25')).summary.paid_orders_count, 1);
-  assert.equal((await eod('2026-11-24')).summary.paid_orders_count, 0);
+  assert.equal((await eod('2031-11-25')).summary.paid_orders_count, 1);
+  assert.equal((await eod('2031-11-24')).summary.paid_orders_count, 0);
 
   // 02:00 cutoff: it belongs to 24 Nov — in the report, its daily row, and the invoice list
   assert.equal((await putSettings({ business_day_cutoff: '02:00' })).status, 200);
-  const day = await eod('2026-11-24');
+  const day = await eod('2031-11-24');
   assert.equal(day.summary.paid_orders_count, 1);
   assert.equal(day.summary.total_revenue, 10);
-  assert.deepEqual(day.dailyBreakdown.map((d) => [d.date, d.paid_orders_count]), [['2026-11-24', 1]]);
-  assert.equal((await eod('2026-11-25')).summary.paid_orders_count, 0);
-  assert.equal(await listCount('2026-11-24'), 1);
-  assert.equal(await listCount('2026-11-25'), 0);
+  assert.deepEqual(day.dailyBreakdown.map((d) => [d.date, d.paid_orders_count]), [['2031-11-24', 1]]);
+  assert.equal((await eod('2031-11-25')).summary.paid_orders_count, 0);
+  assert.equal(await listCount('2031-11-24'), 1);
+  assert.equal(await listCount('2031-11-25'), 0);
 
   // A bill at 02:00 exactly starts the new business day
-  billAt('2026-11-24T20:30:00.000Z'); // 02:00 IST on 25 Nov
-  assert.equal((await eod('2026-11-25')).summary.paid_orders_count, 1);
+  billAt('2031-11-24T20:30:00.000Z'); // 02:00 IST on 25 Nov
+  assert.equal((await eod('2031-11-25')).summary.paid_orders_count, 1);
 
   await putSettings({ business_day_cutoff: '00:00' });
 });
@@ -125,13 +125,13 @@ test('invoice financial year uses the real date, not the business day', async ()
 });
 
 test('time zone setting decides which day a bill belongs to', async () => {
-  billAt('2026-11-27T19:00:00.000Z'); // 00:30 IST on 28 Nov = 23:00 Dubai on 27 Nov
+  billAt('2031-11-27T19:00:00.000Z'); // 00:30 IST on 28 Nov = 23:00 Dubai on 27 Nov
 
-  assert.equal((await eod('2026-11-28')).summary.paid_orders_count, 1, 'India: 28 Nov');
+  assert.equal((await eod('2031-11-28')).summary.paid_orders_count, 1, 'India: 28 Nov');
   assert.equal((await putSettings({ time_zone: 'Asia/Dubai' })).status, 200);
-  assert.equal((await eod('2026-11-27')).summary.paid_orders_count, 1, 'Dubai: 27 Nov');
-  assert.equal((await eod('2026-11-28')).summary.paid_orders_count, 0);
-  assert.equal(await listCount('2026-11-27'), 1);
+  assert.equal((await eod('2031-11-27')).summary.paid_orders_count, 1, 'Dubai: 27 Nov');
+  assert.equal((await eod('2031-11-28')).summary.paid_orders_count, 0);
+  assert.equal(await listCount('2031-11-27'), 1);
   await putSettings({ time_zone: 'Asia/Kolkata' });
 });
 

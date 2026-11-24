@@ -89,6 +89,14 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  // The setup wizard signs the new owner in with the token it gets back
+  const adoptSession = async (newToken, newUser) => {
+    await loadShopCalendar(newToken);
+    sessionStorage.setItem(TOKEN_KEY, newToken);
+    setToken(newToken);
+    setUser(newUser);
+  };
+
   const login = (username, password) => startSession('/api/auth/login', { username, password }, 'Login failed');
   const pinLogin = (username, pin) => startSession('/api/auth/pin-login', { username, pin }, 'Wrong PIN');
 
@@ -119,7 +127,7 @@ export function AuthProvider({ children }) {
   const can = (permission) => Boolean(user && Array.isArray(user.permissions) && user.permissions.includes(permission));
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, pinLogin, logout, authFetch, can }}>
+    <AuthContext.Provider value={{ user, token, loading, login, pinLogin, adoptSession, logout, authFetch, can }}>
       {children}
     </AuthContext.Provider>
   );

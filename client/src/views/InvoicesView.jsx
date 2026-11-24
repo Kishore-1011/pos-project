@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { getShopTimeZone, businessDateString } from '../utils/datetime';
+import { businessDateString } from '../utils/datetime';
+import { formatMoney, formatDate, formatTime, formatDateTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
-import { useToast } from '../components/ui';
+import { useToast, Button, Badge } from '../components/ui';
 import { ThermalReceipt } from '../components/ThermalReceipt';
+import { getCachedReceiptProfile, loadReceiptProfile } from './settings/receiptProfile';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
 import {
@@ -45,7 +47,11 @@ export function InvoicesView() {
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [orderToPrint, setOrderToPrint] = useState(null);
   const [itemsToPrint, setItemsToPrint] = useState([]);
-  const [rollSize, setRollSize] = useState('58mm');
+  // Paper width starts from the shop's Receipt setting; the 58/80 switch overrides it for one print
+  const [rollSize, setRollSize] = useState(() => getCachedReceiptProfile()?.settings?.receipt_width || '58mm');
+  useEffect(() => {
+    loadReceiptProfile(authFetch).then((p) => { if (p?.settings?.receipt_width) setRollSize(p.settings.receipt_width); });
+  }, []);
   const [loadingPrintData, setLoadingPrintData] = useState(false);
 
   // Preset Handlers
@@ -225,14 +231,10 @@ export function InvoicesView() {
       ];
 
       const rows = exportData.map(o => {
-        const d = new Date(o.created_at || Date.now());
-        const dateStr = d.toLocaleDateString('en-IN', { timeZone: getShopTimeZone(), day: '2-digit', month: '2-digit', year: 'numeric' });
-        const timeStr = d.toLocaleTimeString('en-IN', { timeZone: getShopTimeZone(), hour: '2-digit', minute: '2-digit', hour12: true });
-
         return {
           invoice_no: o.invoice_no || o.order_number || formatInvoiceFallback(o.id),
-          date: dateStr,
-          time: timeStr,
+          date: formatDate(o.created_at),
+          time: formatTime(o.created_at),
           staff_name: o.staff_name || o.cashier_name || o.cashier_username || 'Admin',
           customer_name: o.customer_name || 'Walk-in / Guest',
           customer_phone: o.customer_phone || '-',
@@ -253,56 +255,40 @@ export function InvoicesView() {
     }
   };
 
-  const formatDateTime = (dateStr) => {
-    if (!dateStr) return '-';
-    try {
-      const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr.replace(' ', 'T') + 'Z');
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: getShopTimeZone()
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/10 dark:bg-emerald-500/10 text-blue-600 dark:text-emerald-400 flex items-center justify-center">
+          <h1 className="text-2xl font-black text-ink flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center">
               <FileText className="w-5 h-5" />
             </div>
-            <span>Invoices & Order Management</span>
+            <span>Invoices</span>
           </h1>
+          <p className="text-sm text-ink-muted mt-1 ml-12">Every bill, with who billed it and how it was paid.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => fetchInvoices()}
-            title="Refresh Invoices"
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-xs cursor-pointer"
+            title="Refresh invoices"
+            aria-label="Refresh invoices"
+            className="w-10 h-10 rounded-xl border border-line bg-surface text-ink-muted hover:bg-slate-50 hover:text-ink transition-colors shadow-xs cursor-pointer flex items-center justify-center"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
 
-          <button
+          <Button
+            variant="secondary"
+            icon={Download}
             onClick={handleExportCSV}
             disabled={isExportingCSV || totalOrders === 0}
-            className="px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            loading={isExportingCSV}
           >
-            <Download className="w-4 h-4 text-blue-600 dark:text-emerald-400" />
-            <span>{isExportingCSV ? 'Exporting...' : 'Export CSV'}</span>
-          </button>
+            {isExportingCSV ? 'Exporting…' : 'Export CSV'}
+          </Button>
         </div>
       </div>
 
@@ -312,8 +298,8 @@ export function InvoicesView() {
           
           {/* Quick Presets */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
-              Date Presets:
+            <span className="text-xs font-semibold text-ink-muted mr-1">
+              Date range
             </span>
             <button
               onClick={() => handlePresetSelect('today')}
@@ -463,27 +449,27 @@ export function InvoicesView() {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
         
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-            Transactions ({totalOrders})
+          <h2 className="text-sm font-bold text-ink">
+            Transactions <span className="text-ink-subtle font-semibold">({totalOrders})</span>
           </h2>
-          <span className="text-xs text-slate-400 font-medium">
-            25 orders per page
+          <span className="text-xs text-ink-subtle font-medium">
+            {PAGE_LIMIT} per page
           </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
-            <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] text-slate-400 uppercase font-black border-b border-slate-200 dark:border-slate-800">
+            <thead className="bg-slate-50 text-xs text-ink-muted font-semibold border-b border-line">
               <tr>
-                <th className="px-4 py-3">Invoice No</th>
-                <th className="px-4 py-3">Date & Time</th>
-                <th className="px-4 py-3">Billed By</th>
+                <th className="px-4 py-3 whitespace-nowrap min-w-[9.5rem]">Invoice no.</th>
+                <th className="px-4 py-3 whitespace-nowrap">Date & time</th>
+                <th className="px-4 py-3 whitespace-nowrap">Billed by</th>
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3 text-center">Items</th>
-                <th className="px-4 py-3">Payment Mode</th>
-                <th className="px-4 py-3 text-right">Total Amount</th>
+                <th className="px-4 py-3 whitespace-nowrap">Payment</th>
+                <th className="px-4 py-3 text-right">Total</th>
                 <th className="px-4 py-3 text-center">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3 text-right"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -500,7 +486,7 @@ export function InvoicesView() {
                 <tr>
                   <td colSpan={9} className="py-16 text-center text-slate-400">
                     <FileText className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                    <p className="font-bold text-slate-600 dark:text-slate-300">No Invoices Found</p>
+                    <p className="font-bold text-ink">No invoices found</p>
                     <p className="text-xs text-slate-400 mt-0.5">Try broadening your date range or search query.</p>
                   </td>
                 </tr>
@@ -511,7 +497,7 @@ export function InvoicesView() {
                     className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                   >
                     {/* Invoice No */}
-                    <td className="px-4 py-3.5 font-bold font-mono text-slate-900 dark:text-white">
+                    <td className="px-4 py-3.5 font-bold font-mono text-ink whitespace-nowrap">
                       {order.invoice_no || order.order_number || formatInvoiceFallback(order.id)}
                     </td>
 
@@ -555,19 +541,15 @@ export function InvoicesView() {
                     </td>
 
                     {/* Total Amount */}
-                    <td className="px-4 py-3.5 text-right font-black text-slate-900 dark:text-white tabular-nums">
-                      ₹{Number(order.final_amount || 0).toFixed(2)}
+                    <td className="px-4 py-3.5 text-right font-black text-ink tabular-nums whitespace-nowrap">
+                      {formatMoney(order.final_amount)}
                     </td>
 
                     {/* Status */}
                     <td className="px-4 py-3.5 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        order.payment_status === 'PAID'
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                          : 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                      }`}>
-                        {order.payment_status}
-                      </span>
+                      <Badge tone={order.payment_status === 'PAID' ? 'success' : order.payment_status === 'VOID' ? 'danger' : 'warning'}>
+                        {order.payment_status === 'PAID' ? 'Paid' : order.payment_status === 'VOID' ? 'Void' : 'Pending'}
+                      </Badge>
                     </td>
 
                     {/* Actions: View & Print */}
@@ -672,15 +654,15 @@ export function InvoicesView() {
                 {/* Meta Summary */}
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Cashier</span>
+                    <span className="text-ink-subtle text-xs font-medium block">Cashier</span>
                     <span className="font-bold text-slate-800 dark:text-slate-200">{selectedOrderDetail.order.cashier_name || selectedOrderDetail.order.cashier_username || 'Staff'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Payment Mode</span>
+                    <span className="text-ink-subtle text-xs font-medium block">Payment</span>
                     <span className="font-bold text-slate-800 dark:text-slate-200">{selectedOrderDetail.order.payment_method}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Customer</span>
+                    <span className="text-ink-subtle text-xs font-medium block">Customer</span>
                     <span className="font-bold text-blue-600 dark:text-emerald-400">
                       {selectedOrderDetail.order.customer_name 
                         ? `${selectedOrderDetail.order.customer_name} (${selectedOrderDetail.order.customer_phone || selectedOrderDetail.order.customer_code})`
@@ -688,25 +670,25 @@ export function InvoicesView() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Payment Status</span>
+                    <span className="text-ink-subtle text-xs font-medium block">Status</span>
                     <span className="font-bold text-emerald-600 dark:text-emerald-400">{selectedOrderDetail.order.payment_status}</span>
                   </div>
                 </div>
 
                 {/* Line Items List */}
                 <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Ordered Items</h4>
+                  <h4 className="text-xs font-semibold text-ink-muted">Items</h4>
                   <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
                     {selectedOrderDetail.items?.map((item, idx) => (
                       <div key={idx} className="p-3 flex items-center justify-between bg-white dark:bg-slate-900 text-xs">
                         <div>
                           <span className="font-bold text-slate-900 dark:text-white block">{item.item_name}</span>
                           <span className="text-[10px] text-slate-400 font-mono">
-                            {item.quantity} × ₹{Number(item.unit_price).toFixed(2)}
+                            {item.quantity} × {formatMoney(item.unit_price)}
                           </span>
                         </div>
-                        <span className="font-bold text-slate-900 dark:text-white tabular-nums">
-                          ₹{Number(item.subtotal).toFixed(2)}
+                        <span className="font-bold text-ink tabular-nums">
+                          {formatMoney(item.subtotal)}
                         </span>
                       </div>
                     ))}
@@ -716,18 +698,18 @@ export function InvoicesView() {
                 {/* Totals */}
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                    <span>Subtotal:</span>
-                    <span>₹{Number(selectedOrderDetail.order.subtotal || 0).toFixed(2)}</span>
+                    <span>Subtotal</span>
+                    <span className="tabular-nums">{formatMoney(selectedOrderDetail.order.subtotal)}</span>
                   </div>
                   {Number(selectedOrderDetail.order.discount) > 0 && (
-                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
-                      <span>Discount:</span>
-                      <span>- ₹{Number(selectedOrderDetail.order.discount).toFixed(2)}</span>
+                    <div className="flex justify-between text-emerald-700 font-semibold">
+                      <span>Discount</span>
+                      <span className="tabular-nums">−{formatMoney(selectedOrderDetail.order.discount)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-sm font-black text-slate-900 dark:text-white pt-1.5 border-t border-slate-200 dark:border-slate-700">
-                    <span>Grand Total:</span>
-                    <span>₹{Number(selectedOrderDetail.order.final_amount || 0).toFixed(2)}</span>
+                  <div className="flex justify-between text-sm font-black text-ink pt-1.5 border-t border-line">
+                    <span>Total</span>
+                    <span className="tabular-nums">{formatMoney(selectedOrderDetail.order.final_amount)}</span>
                   </div>
                 </div>
 
@@ -774,7 +756,7 @@ export function InvoicesView() {
 
             <div className="flex items-center gap-2 text-blue-600 dark:text-emerald-400 font-black mb-3">
               <Printer className="w-5 h-5" />
-              <span>Thermal Receipt Re-Print ({orderToPrint.invoice_no || orderToPrint.order_number})</span>
+              <span className="whitespace-nowrap">Reprint receipt · {orderToPrint.invoice_no || orderToPrint.order_number}</span>
             </div>
 
             {/* Paper Size selector */}

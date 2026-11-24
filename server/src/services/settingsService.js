@@ -60,8 +60,36 @@ const SETTINGS = {
       }
       return s;
     }
-  }
+  },
+
+  // ---- Receipt (Phase 2) ----
+  receipt_width: {
+    default: '58mm',
+    parse: (v) => {
+      if (v !== '58mm' && v !== '80mm') throw new SettingError("receipt_width must be '58mm' or '80mm'");
+      return v;
+    }
+  },
+  receipt_footer: {
+    default: 'Thank you for your visit!',
+    parse: (v) => {
+      if (v === null || v === undefined) return '';
+      if (typeof v !== 'string') throw new SettingError('receipt_footer must be text');
+      const s = v.trim();
+      if (s.length > 200) throw new SettingError('receipt_footer must be at most 200 characters');
+      return s;
+    }
+  },
+  receipt_show_gstin: { default: true, parse: (v) => parseBool('receipt_show_gstin', v) },
+  receipt_show_licences: { default: true, parse: (v) => parseBool('receipt_show_licences', v) },
+  receipt_show_customer: { default: true, parse: (v) => parseBool('receipt_show_customer', v) }
 };
+
+function parseBool(key, v) {
+  if (v === true || v === 'true') return true;
+  if (v === false || v === 'false') return false;
+  throw new SettingError(`${key} must be true or false`);
+}
 
 function readStored(key) {
   const row = getSync('SELECT value FROM settings WHERE key = ?', [key]);
@@ -101,17 +129,31 @@ async function updateSettings(patch) {
   return updateSettingsSync(patch);
 }
 
-/** Validates (all keys first, nothing saved on error) and saves the given known keys. Use inside transaction(). */
-function updateSettingsSync(patch) {
+/**
+ * Validates a patch of known keys without saving. Returns the normalized changes.
+ * Throws SettingError; `err.key` names the offending setting.
+ */
+function validateSettingsPatch(patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new SettingError('Expected an object of settings');
   const current = getAllSettingsSync();
   const changes = {};
   for (const [key, value] of Object.entries(patch)) {
     const def = SETTINGS[key];
-    if (!def) throw new SettingError(`Unknown setting: ${key}`);
-    changes[key] = def.parse(value);
-    if (def.guard) def.guard(changes[key], current[key]);
+    try {
+      if (!def) throw new SettingError(`Unknown setting: ${key}`);
+      changes[key] = def.parse(value);
+      if (def.guard) def.guard(changes[key], current[key]);
+    } catch (err) {
+      if (err instanceof SettingError) err.key = key;
+      throw err;
+    }
   }
+  return changes;
+}
+
+/** Validates (all keys first, nothing saved on error) and saves the given known keys. Use inside transaction(). */
+function updateSettingsSync(patch) {
+  const changes = validateSettingsPatch(patch);
   for (const [key, value] of Object.entries(changes)) {
     runSync(
       `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -129,5 +171,6 @@ module.exports = {
   getAllSettings,
   getAllSettingsSync,
   updateSettings,
-  updateSettingsSync
+  updateSettingsSync,
+  validateSettingsPatch
 };

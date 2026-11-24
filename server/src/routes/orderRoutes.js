@@ -466,7 +466,7 @@ router.patch('/:id/status', requirePermission('orders.void', 'orders.unvoid'), a
         entityType: 'order',
         entityId: orderId,
         oldValue: { payment_status: oldOrder.payment_status },
-        newValue: { payment_status: status, reason: reason || null }
+        newValue: { invoice_no: oldOrder.invoice_no, payment_status: status, reason: reason || null }
       });
     });
 

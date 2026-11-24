@@ -1,35 +1,51 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
-  ShoppingCart, FileText, Package, Users, ClipboardList, BarChart3, LogOut, UserCheck,
-  PanelLeftClose, PanelLeftOpen, Repeat, CalendarDays
+  ShoppingCart, FileText, Package, Users, ClipboardList, BarChart3, LogOut, UserCheck, Repeat, CalendarDays, Settings
 } from 'lucide-react';
-import { PRODUCT_NAME, STORAGE_PREFIX } from '../config/brand';
+import { PRODUCT_NAME, PRODUCT_SHORT } from '../config/brand';
 import { businessDateString } from '../utils/datetime';
 import { formatDate } from '../utils/format';
 import { SwitchUserDialog } from './SwitchUserDialog';
 
 // Menu built from the user's permissions (must match the screen map in App.jsx)
 const NAV_ITEMS = [
-  { id: 'billing', label: 'Billing', icon: ShoppingCart, permission: 'billing.create' },
-  { id: 'invoices', label: 'Invoices', icon: FileText, permission: 'orders.view' },
-  { id: 'customers', label: 'Customers', icon: UserCheck, permission: 'customers.view' },
-  { id: 'items', label: 'Items', icon: Package, permission: 'items.manage' },
-  { id: 'reports', label: 'Reports', icon: BarChart3, permission: 'reports.view' },
-  { id: 'users', label: 'Staff', icon: Users, permission: 'users.manage' },
-  { id: 'audit', label: 'Audit log', icon: ClipboardList, permission: 'audit.view' }
+  { id: 'billing', label: 'Billing', icon: ShoppingCart, permissions: ['billing.create'] },
+  { id: 'invoices', label: 'Invoices', icon: FileText, permissions: ['orders.view'] },
+  { id: 'customers', label: 'Customers', icon: UserCheck, permissions: ['customers.view'] },
+  { id: 'items', label: 'Items', icon: Package, permissions: ['items.manage'] },
+  { id: 'reports', label: 'Reports', icon: BarChart3, permissions: ['reports.view'] },
+  { id: 'users', label: 'Staff', icon: Users, permissions: ['users.manage'] },
+  { id: 'audit', label: 'Audit log', icon: ClipboardList, permissions: ['audit.view'] },
+  { id: 'settings', label: 'Settings', icon: Settings, permissions: ['settings.manage', 'users.manage'] }
 ];
-
-const SIDEBAR_KEY = `${STORAGE_PREFIX}_sidebar_collapsed`;
-const readCollapsed = () => {
-  try { return localStorage.getItem(SIDEBAR_KEY) === '1'; } catch (e) { return false; }
-};
 
 const initials = (name = '') => name.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
+/** Icon rail button with a hover/focus label (the product's own look, not a dashboard sidebar). */
+function RailButton({ icon: Icon, label, active, onClick, tone = 'default' }) {
+  const base = 'w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
+  const look = tone === 'danger'
+    ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200'
+    : active
+      ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30'
+      : 'text-ink-subtle hover:bg-slate-100 hover:text-ink';
+  return (
+    <button type="button" onClick={onClick} aria-label={label} aria-current={active ? 'page' : undefined} className={`${base} ${look}`}>
+      <Icon className="w-5 h-5" aria-hidden="true" />
+      {active && <span className="w-1.5 h-1.5 rounded-full bg-white absolute -right-1 top-1/2 -translate-y-1/2" aria-hidden="true" />}
+      <span
+        className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg"
+        aria-hidden="true"
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
 export function MainLayout({ activeTab, setActiveTab, children }) {
   const { user, logout, can, authFetch } = useAuth();
-  const [collapsed, setCollapsed] = useState(readCollapsed);
   const [shopName, setShopName] = useState('');
   const [switchOpen, setSwitchOpen] = useState(false);
   const [businessDay, setBusinessDay] = useState(() => businessDateString());
@@ -49,71 +65,28 @@ export function MainLayout({ activeTab, setActiveTab, children }) {
     return () => clearInterval(t);
   }, []);
 
-  const toggleCollapsed = () => {
-    setCollapsed((c) => {
-      try { localStorage.setItem(SIDEBAR_KEY, c ? '0' : '1'); } catch (e) { /* per-PC preference only */ }
-      return !c;
-    });
-  };
-
   if (!user) return children;
-  const items = NAV_ITEMS.filter((item) => can(item.permission));
+  const items = NAV_ITEMS.filter((item) => item.permissions.some((p) => can(p)));
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-canvas text-ink">
 
-      {/* Sidebar: icons with labels; can be collapsed to icons only (remembered on this PC) */}
-      <aside
-        className={`${collapsed ? 'w-[4.5rem]' : 'w-52'} flex-shrink-0 h-screen bg-surface border-r border-line flex flex-col transition-[width] duration-150`}
-        aria-label="Main menu"
-      >
-        <div className={`h-16 flex items-center gap-2.5 border-b border-line ${collapsed ? 'justify-center px-2' : 'px-4'}`}>
-          <img src="./favicon.svg" alt="" className="w-9 h-9 rounded-xl flex-shrink-0" />
-          {!collapsed && <span className="text-sm font-bold text-ink truncate">{PRODUCT_NAME}</span>}
+      {/* Icon rail: labels on hover */}
+      <aside className="w-20 flex-shrink-0 h-screen bg-surface border-r border-line flex flex-col justify-between items-center py-4 z-40" aria-label="Main menu">
+        <div className="flex flex-col items-center gap-1">
+          <div className="w-12 h-12 rounded-2xl bg-brand-600 flex items-center justify-center p-1 shadow-sm" title={PRODUCT_NAME}>
+            <img src="./favicon.svg" alt={PRODUCT_NAME} className="w-full h-full object-contain" />
+          </div>
+          <span className="text-[10px] font-black text-ink-subtle uppercase tracking-tight">{PRODUCT_SHORT}</span>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-1">
-          {items.map((item) => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveTab(item.id)}
-                title={collapsed ? item.label : undefined}
-                aria-current={active ? 'page' : undefined}
-                className={`w-full flex items-center gap-3 rounded-xl text-sm font-semibold transition-colors cursor-pointer h-10 ${
-                  collapsed ? 'justify-center px-0' : 'px-3'
-                } ${active ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/25' : 'text-ink-muted hover:bg-slate-100 hover:text-ink'}`}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-                {collapsed ? <span className="sr-only">{item.label}</span> : <span className="truncate">{item.label}</span>}
-              </button>
-            );
-          })}
+        <nav className="flex flex-col items-center gap-3">
+          {items.map((item) => (
+            <RailButton key={item.id} icon={item.icon} label={item.label} active={activeTab === item.id} onClick={() => setActiveTab(item.id)} />
+          ))}
         </nav>
 
-        <div className="border-t border-line p-2.5 space-y-1">
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            title={collapsed ? 'Expand menu' : undefined}
-            className={`w-full h-9 flex items-center gap-3 rounded-xl text-sm text-ink-muted hover:bg-slate-100 hover:text-ink cursor-pointer ${collapsed ? 'justify-center' : 'px-3'}`}
-          >
-            {collapsed ? <PanelLeftOpen className="w-5 h-5" aria-hidden="true" /> : <PanelLeftClose className="w-5 h-5" aria-hidden="true" />}
-            {collapsed ? <span className="sr-only">Expand menu</span> : <span>Collapse menu</span>}
-          </button>
-          <button
-            type="button"
-            onClick={logout}
-            title={collapsed ? 'Log out' : undefined}
-            className={`w-full h-9 flex items-center gap-3 rounded-xl text-sm font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer ${collapsed ? 'justify-center' : 'px-3'}`}
-          >
-            <LogOut className="w-5 h-5" aria-hidden="true" />
-            {collapsed ? <span className="sr-only">Log out</span> : <span>Log out</span>}
-          </button>
-        </div>
+        <RailButton icon={LogOut} label="Log out" onClick={logout} tone="danger" />
       </aside>
 
       {/* Workspace: top bar + screen */}

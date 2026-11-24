@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getShopTimeZone } from '../utils/datetime';
+import { formatMoney, formatDateTime, formatDate as formatDay } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
-import { useToast, useDialogs } from '../components/ui';
+import { useToast, useDialogs, Badge } from '../components/ui';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
 import {
@@ -196,24 +196,8 @@ export function CustomersView() {
     }
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'No visits yet';
-    try {
-      const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr.replace(' ', 'T') + 'Z');
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: getShopTimeZone()
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  // Shared shop-time-zone format (23 Nov 2026, 9:16 pm); "No visits yet" when empty
+  const formatDate = (dateStr) => (dateStr ? formatDateTime(dateStr) : 'No visits yet');
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -229,12 +213,13 @@ export function CustomersView() {
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/10 dark:bg-emerald-500/10 text-blue-600 dark:text-emerald-400 flex items-center justify-center">
+          <h1 className="text-2xl font-black text-ink flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center">
               <Users className="w-5 h-5" />
             </div>
             <span>Customers</span>
           </h1>
+          <p className="text-sm text-ink-muted mt-1 ml-12">Regulars, their visits and what they spend with you.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -285,7 +270,7 @@ export function CustomersView() {
             className="px-4 py-2.5 bg-blue-600 dark:bg-emerald-500 hover:bg-blue-700 dark:hover:bg-emerald-600 text-white dark:text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 dark:shadow-emerald-500/20 flex items-center gap-2 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Register New Customer</span>
+            <span>New customer</span>
           </button>
         </div>
       </div>
@@ -294,46 +279,46 @@ export function CustomersView() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Registered Profiles</span>
+            <span className="text-sm font-semibold">Customers</span>
             <Users className="w-4 h-4 text-blue-600 dark:text-emerald-400" />
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
             {stats.total_customers}
           </div>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 block">Active CRM database</span>
+          <span className="text-xs text-ink-subtle mt-1 block">Registered profiles</span>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Customer Lifetime Spend</span>
+            <span className="text-sm font-semibold">Lifetime spend</span>
             <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2">
-            ₹{stats.total_customer_revenue.toFixed(2)}
+            {formatMoney(stats.total_customer_revenue)}
           </div>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 block">From tagged customer orders</span>
+          <span className="text-xs text-ink-subtle mt-1 block">From bills with a customer attached</span>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Total Customer Bills</span>
+            <span className="text-sm font-semibold">Customer bills</span>
             <ShoppingBag className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
             {stats.total_customer_orders}
           </div>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 block">Completed repeat visits</span>
+          <span className="text-xs text-ink-subtle mt-1 block">Paid bills with a customer</span>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Avg Spend / Customer</span>
+            <span className="text-sm font-semibold">Average per customer</span>
             <Award className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
-            ₹{stats.avg_spend.toFixed(2)}
+            {formatMoney(stats.avg_spend)}
           </div>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 block">Average spend per customer</span>
+          <span className="text-xs text-ink-subtle mt-1 block">Lifetime spend ÷ customers</span>
         </div>
       </div>
 
@@ -437,14 +422,14 @@ export function CustomersView() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/75 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">
-                  <th className="py-3.5 px-4 sm:px-6">Customer Code</th>
+                <tr className="bg-slate-50 border-b border-line text-xs font-semibold text-ink-muted">
+                  <th className="py-3.5 px-4 sm:px-6 whitespace-nowrap">Customer ID</th>
                   <th className="py-3.5 px-4 sm:px-6">Name</th>
-                  <th className="py-3.5 px-4 sm:px-6">Phone Number</th>
-                  <th className="py-3.5 px-4 sm:px-6 text-center">Orders Placed</th>
-                  <th className="py-3.5 px-4 sm:px-6 text-right">Lifetime Spend (₹)</th>
-                  <th className="py-3.5 px-4 sm:px-6">Last Visit</th>
-                  <th className="py-3.5 px-4 sm:px-6 text-right">Actions</th>
+                  <th className="py-3.5 px-4 sm:px-6">Phone</th>
+                  <th className="py-3.5 px-4 sm:px-6 text-center">Bills</th>
+                  <th className="py-3.5 px-4 sm:px-6 text-right whitespace-nowrap">Lifetime spend</th>
+                  <th className="py-3.5 px-4 sm:px-6 whitespace-nowrap">Last visit</th>
+                  <th className="py-3.5 px-4 sm:px-6 text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -478,7 +463,7 @@ export function CustomersView() {
                             <span className="font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-emerald-400 transition-colors">
                               {cust.name}
                             </span>
-                            <span className="text-[10px] text-slate-400">Registered {new Date(cust.created_at).toLocaleDateString('en-IN')}</span>
+                            <span className="text-[10px] text-slate-400">Since {formatDay(cust.created_at)}</span>
                           </div>
                         </div>
                       </td>
@@ -507,7 +492,7 @@ export function CustomersView() {
                       {/* Total Spend */}
                       <td className="py-4 px-4 sm:px-6 text-right">
                         <span className="font-black text-slate-900 dark:text-white text-sm">
-                          ₹{spend.toFixed(2)}
+                          {formatMoney(spend)}
                         </span>
                       </td>
 
@@ -529,7 +514,7 @@ export function CustomersView() {
                               handleToggleStatus(cust);
                             }}
                             title={cust.is_active === 0 ? "Click to Activate customer" : "Click to Disable customer"}
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase transition-all cursor-pointer flex items-center gap-1.5 border ${
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border ${
                               cust.is_active !== 0
                                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
                                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:bg-slate-200'
@@ -703,23 +688,23 @@ export function CustomersView() {
                 {/* Lifetime Metrics Overview */}
                 <div className="grid grid-cols-3 gap-2.5 pb-2">
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Lifetime Spend</span>
+                    <span className="text-xs font-medium text-ink-subtle block">Lifetime spend</span>
                     <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block tabular-nums">
-                      ₹{Number(selectedCustomerForHistory.total_spend || 0).toFixed(2)}
+                      {formatMoney(selectedCustomerForHistory.total_spend)}
                     </span>
                   </div>
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total Orders</span>
+                    <span className="text-xs font-medium text-ink-subtle block">Bills</span>
                     <span className="text-sm font-black text-slate-900 dark:text-white mt-0.5 block tabular-nums">
                       {selectedCustomerForHistory.total_orders || 0}
                     </span>
                   </div>
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Avg Bill Value</span>
+                    <span className="text-xs font-medium text-ink-subtle block">Average bill</span>
                     <span className="text-sm font-black text-blue-600 dark:text-emerald-400 mt-0.5 block tabular-nums">
-                      ₹{selectedCustomerForHistory.total_orders > 0 
-                        ? (Number(selectedCustomerForHistory.total_spend || 0) / Number(selectedCustomerForHistory.total_orders)).toFixed(2)
-                        : '0.00'}
+                      {formatMoney(selectedCustomerForHistory.total_orders > 0
+                        ? Number(selectedCustomerForHistory.total_spend || 0) / Number(selectedCustomerForHistory.total_orders)
+                        : 0)}
                     </span>
                   </div>
                 </div>
@@ -727,12 +712,12 @@ export function CustomersView() {
                 {/* Related Order Invoices List */}
                 <div className="pt-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Customer Order History ({customerOrders.length})
+                    <h4 className="text-sm font-bold text-ink">
+                      Bills <span className="text-ink-subtle font-semibold">({customerOrders.length})</span>
                     </h4>
                     {customerOrders.length > 0 && (
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        5 orders / page
+                      <span className="text-xs text-ink-subtle font-medium">
+                        {HISTORY_PAGE_LIMIT} per page
                       </span>
                     )}
                   </div>
@@ -759,23 +744,19 @@ export function CustomersView() {
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold text-xs text-slate-900 dark:text-white">
+                                <span className="font-mono font-bold text-xs text-ink whitespace-nowrap">
                                   {order.invoice_no || order.order_number || formatInvoiceFallback(order.id)}
                                 </span>
-                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                                  order.payment_status === 'PAID'
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-                                    : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'
-                                }`}>
-                                  {order.payment_status}
-                                </span>
+                                <Badge tone={order.payment_status === 'PAID' ? 'success' : order.payment_status === 'VOID' ? 'danger' : 'warning'}>
+                                  {order.payment_status === 'PAID' ? 'Paid' : order.payment_status === 'VOID' ? 'Void' : 'Pending'}
+                                </Badge>
                                 <span className="px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
                                   {order.payment_method}
                                 </span>
                               </div>
 
                               <span className="text-sm font-black text-blue-600 dark:text-emerald-400 tabular-nums">
-                                ₹{Number(order.final_amount || 0).toFixed(2)}
+                                {formatMoney(order.final_amount)}
                               </span>
                             </div>
 

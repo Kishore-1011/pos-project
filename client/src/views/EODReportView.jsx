@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { getShopTimeZone, businessDateString } from '../utils/datetime';
+import { businessDateString } from '../utils/datetime';
+import { formatMoney, formatDate, formatTime, formatDateTime } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
-import { useToast, useDialogs } from '../components/ui';
+import { useToast, useDialogs, Button, Badge } from '../components/ui';
 import { exportToCSV } from '../utils/csvExport';
 import { FILE_PREFIX, formatInvoiceFallback } from '../config/brand';
 import {
@@ -125,14 +126,10 @@ export function EODReportView() {
       ];
 
       const rows = allOrders.map(o => {
-        const d = new Date(o.created_at || Date.now());
-        const dateStr = d.toLocaleDateString('en-IN', { timeZone: getShopTimeZone(), day: '2-digit', month: '2-digit', year: 'numeric' });
-        const timeStr = d.toLocaleTimeString('en-IN', { timeZone: getShopTimeZone(), hour: '2-digit', minute: '2-digit', hour12: true });
-
         return {
           invoice_no: o.invoice_no || o.order_number || formatInvoiceFallback(o.id),
-          date: dateStr,
-          time: timeStr,
+          date: formatDate(o.created_at),
+          time: formatTime(o.created_at),
           customer_name: o.customer_name || 'Walk-in / Guest',
           customer_phone: o.customer_phone || '-',
           payment_method: o.payment_method || 'CASH',
@@ -184,24 +181,6 @@ export function EODReportView() {
     }
   };
 
-  const formatDateTime = (dateStr) => {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr.replace(' ', 'T') + 'Z');
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: getShopTimeZone()
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
   // Metrics breakdown calculations
   const totalRevenue = report?.summary?.total_revenue || 0;
   const customerRevenue = report?.summary?.customer_revenue || 0;
@@ -221,14 +200,14 @@ export function EODReportView() {
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-600/10 dark:bg-emerald-500/10 text-blue-600 dark:text-emerald-400 flex items-center justify-center">
-                <BarChart3 className="w-4 h-4" />
+            <h1 className="text-2xl font-black text-ink flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center">
+                <BarChart3 className="w-5 h-5" />
               </div>
-              <span>Sales Performance & Date-Range Reports</span>
+              <span>Reports</span>
             </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Consolidated revenue, payment split, registered customer retention, and top sellers.
+            <p className="text-sm text-ink-muted mt-1 ml-12">
+              Sales, payment split, customers and top sellers for any date range.
             </p>
           </div>
 
@@ -315,40 +294,40 @@ export function EODReportView() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Gross Net Revenue</span>
+              <span className="text-sm font-semibold text-ink-muted block">Net sales</span>
               <div className="text-2xl font-black text-blue-600 dark:text-emerald-400 mt-1">
-                ₹{report.summary.total_revenue.toFixed(2)}
+                {formatMoney(report.summary.total_revenue)}
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block font-medium">
-                {startDate === endDate ? `On ${startDate}` : `${startDate} to ${endDate}`}
+                {startDate === endDate ? formatDate(startDate) : `${formatDate(startDate)} – ${formatDate(endDate)}`}
               </span>
             </div>
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Paid Orders Count</span>
+              <span className="text-sm font-semibold text-ink-muted block">Paid bills</span>
               <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
                 {report.summary.paid_orders_count}
               </div>
               <span className="text-[10px] text-emerald-600 mt-1 block font-semibold">
-                Completed transactions
+                Completed and paid
               </span>
             </div>
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Total Discounts Allowed</span>
+              <span className="text-sm font-semibold text-ink-muted block">Discounts given</span>
               <div className="text-2xl font-black text-slate-700 dark:text-slate-300 mt-1">
-                ₹{report.summary.total_discounts.toFixed(2)}
+                {formatMoney(report.summary.total_discounts)}
               </div>
-              <span className="text-[10px] text-slate-400 mt-1 block font-medium">Total deductions applied</span>
+              <span className="text-xs text-ink-subtle mt-1 block font-medium">Taken off bill totals</span>
             </div>
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Voided Bills</span>
+              <span className="text-sm font-semibold text-ink-muted block">Voided bills</span>
               <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
                 {report.summary.void_orders_count}
               </div>
               <span className="text-[10px] text-rose-500 mt-1 block font-medium">
-                ₹{report.summary.void_revenue.toFixed(2)} cancelled sales
+                {formatMoney(report.summary.void_revenue)} not counted in sales
               </span>
             </div>
 
@@ -363,10 +342,10 @@ export function EODReportView() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Registered CRM Customers vs. Walk-in / Guest Split
+                    Customers vs. walk-ins
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Ratio of repeat profile sales vs unidentified walk-in visitors
+                    Share of sales from bills with a customer attached
                   </p>
                 </div>
               </div>
@@ -374,11 +353,11 @@ export function EODReportView() {
               <div className="flex items-center gap-3 text-xs font-bold">
                 <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
                   <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
-                  CRM Customers ({customerSpendPercent}%)
+                  Customers ({customerSpendPercent}%)
                 </span>
                 <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                   <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-600"></span>
-                  Walk-in Guest ({guestSpendPercent}%)
+                  Walk-ins ({guestSpendPercent}%)
                 </span>
               </div>
             </div>
@@ -388,12 +367,12 @@ export function EODReportView() {
               <div 
                 style={{ width: `${customerSpendPercent}%` }} 
                 className="h-full bg-indigo-600 dark:bg-indigo-500 transition-all duration-500"
-                title={`Registered Customers: ₹${customerRevenue.toFixed(2)} (${customerSpendPercent}%)`}
+                title={`Customers: ${formatMoney(customerRevenue)} (${customerSpendPercent}%)`}
               />
               <div 
                 style={{ width: `${guestSpendPercent}%` }} 
                 className="h-full bg-slate-300 dark:bg-slate-600 transition-all duration-500"
-                title={`Walk-in Guests: ₹${guestRevenue.toFixed(2)} (${guestSpendPercent}%)`}
+                title={`Walk-ins: ${formatMoney(guestRevenue)} (${guestSpendPercent}%)`}
               />
             </div>
 
@@ -401,29 +380,29 @@ export function EODReportView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 uppercase">
-                    Registered Profile Orders
+                  <span className="text-xs font-semibold text-indigo-900">
+                    Customer bills
                   </span>
                   <div className="text-xs text-indigo-700 dark:text-indigo-400">
                     <strong>{customerOrdersCount}</strong> bills placed
                   </div>
                 </div>
                 <span className="text-lg font-black text-indigo-700 dark:text-indigo-300">
-                  ₹{customerRevenue.toFixed(2)}
+                  {formatMoney(customerRevenue)}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase">
-                    Walk-in / Guest Orders
+                  <span className="text-xs font-semibold text-ink">
+                    Walk-in bills
                   </span>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     <strong>{guestOrdersCount}</strong> bills placed
                   </div>
                 </div>
                 <span className="text-lg font-black text-slate-700 dark:text-slate-300">
-                  ₹{guestRevenue.toFixed(2)}
+                  {formatMoney(guestRevenue)}
                 </span>
               </div>
             </div>
@@ -434,7 +413,7 @@ export function EODReportView() {
             
             {/* Payment Method Split */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Payment Method Breakdown</h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Payment methods</h3>
               {report.paymentBreakdown.length === 0 ? (
                 <p className="text-xs text-slate-400 py-6 text-center">No transactions recorded for this period.</p>
               ) : (
@@ -448,7 +427,7 @@ export function EODReportView() {
                         <span className="text-xs font-bold text-slate-900 dark:text-white">{pm.payment_method}</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs font-black text-blue-600 dark:text-emerald-400">₹{pm.amount.toFixed(2)}</span>
+                        <span className="text-xs font-black text-blue-600 dark:text-emerald-400">{formatMoney(pm.amount)}</span>
                         <span className="text-[10px] text-slate-400 block font-medium">{pm.count} bills</span>
                       </div>
                     </div>
@@ -459,7 +438,7 @@ export function EODReportView() {
 
             {/* Top Selling Items */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Top Selling Items in Span</h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Top sellers</h3>
               {report.topItems.length === 0 ? (
                 <p className="text-xs text-slate-400 py-6 text-center">No item sales for this date range.</p>
               ) : (
@@ -473,7 +452,7 @@ export function EODReportView() {
                         <span className="font-bold text-slate-900 dark:text-white">{item.item_name}</span>
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-blue-600 dark:text-emerald-400">₹{item.total_sales.toFixed(2)}</span>
+                        <span className="font-bold text-blue-600 dark:text-emerald-400">{formatMoney(item.total_sales)}</span>
                         <span className="text-[10px] text-slate-400 block font-medium">{item.total_qty} units sold</span>
                       </div>
                     </div>
@@ -487,26 +466,26 @@ export function EODReportView() {
           {/* Daily Breakdown for Multi-Day Range */}
           {report.dailyBreakdown && report.dailyBreakdown.length > 1 && (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Daily Performance Breakdown</h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Day by day</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] text-slate-400 uppercase font-black border-b border-slate-200 dark:border-slate-800">
+                  <thead className="bg-slate-50 text-xs text-ink-muted font-semibold border-b border-line">
                     <tr>
                       <th className="px-4 py-2.5">Date</th>
-                      <th className="px-4 py-2.5 text-center">Paid Orders</th>
-                      <th className="px-4 py-2.5 text-center">Customer Bills</th>
-                      <th className="px-4 py-2.5 text-center">Guest Bills</th>
-                      <th className="px-4 py-2.5 text-right">Revenue (₹)</th>
+                      <th className="px-4 py-2.5 text-center">Paid bills</th>
+                      <th className="px-4 py-2.5 text-center">Customer bills</th>
+                      <th className="px-4 py-2.5 text-center">Walk-in bills</th>
+                      <th className="px-4 py-2.5 text-right">Net sales</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {report.dailyBreakdown.map((d, idx) => (
                       <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white font-mono">{d.date}</td>
+                        <td className="px-4 py-3 font-bold text-ink whitespace-nowrap">{formatDate(d.date)}</td>
                         <td className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">{d.paid_orders_count}</td>
                         <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400 font-bold">{d.customer_orders}</td>
                         <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">{d.guest_orders}</td>
-                        <td className="px-4 py-3 text-right font-black text-blue-600 dark:text-emerald-400">₹{Number(d.total_revenue).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right font-black text-blue-600 dark:text-emerald-400">{formatMoney(d.total_revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -520,35 +499,38 @@ export function EODReportView() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Detailed Orders in Selected Range
+                  Bills in this range
                 </h3>
                 <p className="text-xs text-slate-400 font-medium">
-                  {totalOrders} total recorded {totalOrders === 1 ? 'transaction' : 'transactions'} in range
+                  {totalOrders} {totalOrders === 1 ? 'bill' : 'bills'}, including voids
                 </p>
               </div>
 
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Download}
                 onClick={handleExportCSV}
                 disabled={isExportingCSV || totalOrders === 0}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-2 self-start sm:self-auto cursor-pointer disabled:opacity-50"
+                loading={isExportingCSV}
+                className="self-start sm:self-auto"
               >
-                <Download className="w-3.5 h-3.5 text-blue-600 dark:text-emerald-400" />
-                <span>{isExportingCSV ? 'Exporting...' : 'Export CSV'}</span>
-              </button>
+                {isExportingCSV ? 'Exporting…' : 'Export CSV'}
+              </Button>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] text-slate-400 uppercase font-black border-b border-slate-200 dark:border-slate-800">
+                <thead className="bg-slate-50 text-xs text-ink-muted font-semibold border-b border-line">
                   <tr>
-                    <th className="px-4 py-3">Invoice No</th>
-                    <th className="px-4 py-3">Date/Time</th>
+                    <th className="px-4 py-3 whitespace-nowrap min-w-[9.5rem]">Invoice no.</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Date & time</th>
                     <th className="px-4 py-3">Customer</th>
                     <th className="px-4 py-3">Cashier</th>
                     <th className="px-4 py-3">Amount</th>
-                    <th className="px-4 py-3">Method</th>
+                    <th className="px-4 py-3">Payment</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Void Action</th>
+                    <th className="px-4 py-3 text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -561,10 +543,10 @@ export function EODReportView() {
                   ) : (
                     recentOrders.map((o) => (
                       <tr key={o.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white font-mono text-[11px]">
+                        <td className="px-4 py-3 font-bold text-ink font-mono text-[11px] whitespace-nowrap">
                           {o.invoice_no || o.order_number}
                         </td>
-                        <td className="px-4 py-3 text-[11px] text-slate-400">
+                        <td className="px-4 py-3 text-[11px] text-ink-subtle whitespace-nowrap">
                           {formatDateTime(o.created_at)}
                         </td>
                         <td className="px-4 py-3">
@@ -578,27 +560,20 @@ export function EODReportView() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-slate-500 font-medium">@{o.cashier_username}</td>
-                        <td className="px-4 py-3 font-black text-blue-600 dark:text-emerald-400">₹{Number(o.final_amount || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 font-black text-blue-600 dark:text-emerald-400">{formatMoney(o.final_amount)}</td>
                         <td className="px-4 py-3 font-semibold">{o.payment_method}</td>
                         <td className="px-4 py-3">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            o.payment_status === 'PAID'
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                          }`}>
-                            {o.payment_status}
-                          </span>
+                          <Badge tone={o.payment_status === 'PAID' ? 'success' : o.payment_status === 'VOID' ? 'danger' : 'warning'}>
+                            {o.payment_status === 'PAID' ? 'Paid' : o.payment_status === 'VOID' ? 'Void' : 'Pending'}
+                          </Badge>
                         </td>
                         <td className="px-4 py-3 text-right">
                           {o.payment_status === 'PAID' ? (
-                            <button
-                              onClick={() => handleVoidOrder(o.id)}
-                              className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              Void Bill
-                            </button>
+                            <Button variant="danger-quiet" size="sm" onClick={() => handleVoidOrder(o.id)}>
+                              Void bill
+                            </Button>
                           ) : (
-                            <span className="text-[10px] text-slate-400 italic">Voided</span>
+                            <span className="text-xs text-ink-subtle italic">Voided</span>
                           )}
                         </td>
                       </tr>
