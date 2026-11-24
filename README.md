@@ -55,7 +55,9 @@ On start, pending database migrations run automatically; if the database already
 Money is stored as integer paise (`*_paise` columns); the API returns rupees.
 In the desktop app they live in `%APPDATA%\pos-project\`.
 
-First login is `admin` / `admin123`. Change it immediately. A first-run setup wizard is planned.
+A fresh install opens the first-run setup wizard (business, address, tax, bill numbers, owner account). The seeded `admin` / `admin123` login stops working once setup is complete.
+
+Project status, decisions and next steps: [docs/HANDOFF.md](docs/HANDOFF.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Build the Windows installer
 
